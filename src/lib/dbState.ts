@@ -297,6 +297,15 @@ export function generateWhatsAppReportText(report: DailyProgressReport): string 
     ? `\n\n📷 *SITE PROGRESS PHOTOS:* ${totalPhotos} Photos Attached (Before: ${report.beforePhotos?.length || 0}, After: ${report.afterPhotos?.length || 0})` 
     : '';
 
+  const totalDamageDeduction = (report.damageDeductions || []).reduce((sum, d) => sum + (d.damageAmount || 0), 0);
+  const damageLines = (report.damageDeductions || []).map(d => 
+    `• ${d.contractorOrWorkerName} (${d.tradeOrAgency || 'Worker'}) = *₹${d.damageAmount.toLocaleString('en-IN')} Deducted*\n  └ Material: ${d.materialName}\n  └ Reason: ${d.description}${d.photos && d.photos.length > 0 ? ` (${d.photos.length} Damage Photos Attached)` : ''}`
+  ).join('\n\n');
+
+  const damageSection = (report.damageDeductions && report.damageDeductions.length > 0)
+    ? `\n\n━━━━━━━━━━━━━━━━━━━━━\n⚠️ *MATERIAL DAMAGE & BILL DEDUCTIONS (₹${totalDamageDeduction.toLocaleString('en-IN')} Total):*\n\n${damageLines}`
+    : '';
+
   return `🏗️ *${report.buildingName || 'B-Building Work Progress'}*
 
 📅 *Date:* ${report.reportDate || '13/08/2026'}
@@ -336,7 +345,7 @@ ${customTradeLines ? `\n${customTradeLines}` : ''}
 ━━━━━━━━━━━━━━━━━━━━━
 📦 *STOCK CEMENT*
 
-${cementLines}${photoLine}
+${cementLines}${photoLine}${damageSection}
 
 ━━━━━━━━━━━━━━━━━━━━━
 ✅ *Reported via ConstructTrack SiteOps*`;

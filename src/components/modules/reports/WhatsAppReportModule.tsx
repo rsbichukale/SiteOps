@@ -3,9 +3,9 @@
 import React, { useState } from 'react';
 import {
   MessageSquare, Share2, Copy, Check, Calendar, Building, Users, HardHat,
-  Package, Sparkles, Plus, Minus, RotateCcw, Clock, Save, History, FileText, Download, Sun, Moon, Trash2, Camera, Image as ImageIcon
+  Package, Sparkles, Plus, Minus, RotateCcw, Clock, Save, History, FileText, Download, Sun, Moon, Trash2, Camera, Image as ImageIcon, AlertTriangle, DollarSign
 } from 'lucide-react';
-import { DailyProgressReport, CementStockEntry, CustomTradeEntry, ReportWorkPhoto } from '@/types';
+import { DailyProgressReport, CementStockEntry, CustomTradeEntry, ReportWorkPhoto, MaterialDamageEntry } from '@/types';
 import { getAppState, saveDailyReport, generateWhatsAppReportText, DEFAULT_SAMPLE_REPORT } from '@/lib/dbState';
 import { downloadDPRPdfReport } from '@/lib/pdfReportGenerator';
 
@@ -36,6 +36,7 @@ export const WhatsAppReportModule: React.FC = () => {
     departmentLabourCount: 0,
     beforePhotos: latestSavedReport.beforePhotos || [],
     afterPhotos: latestSavedReport.afterPhotos || [],
+    damageDeductions: latestSavedReport.damageDeductions || [],
   });
 
   const [copied, setCopied] = useState(false);
@@ -50,6 +51,15 @@ export const WhatsAppReportModule: React.FC = () => {
   const [newContractorName, setNewContractorName] = useState('');
   const [newTradeCount, setNewTradeCount] = useState(1);
   const [newTradeNotes, setNewTradeNotes] = useState('');
+
+  // Material Damage Form State
+  const [showAddDamageForm, setShowAddDamageForm] = useState(false);
+  const [damageContractor, setDamageContractor] = useState('');
+  const [damageTrade, setDamageTrade] = useState('Tiles');
+  const [damageMaterial, setDamageMaterial] = useState('');
+  const [damageAmount, setDamageAmount] = useState<number>(0);
+  const [damageDescription, setDamageDescription] = useState('');
+  const [damagePhotos, setDamagePhotos] = useState<string[]>([]);
 
   const formattedText = generateWhatsAppReportText(report);
 
@@ -138,7 +148,59 @@ export const WhatsAppReportModule: React.FC = () => {
     }));
   };
 
-  // Image Upload Handlers
+  // Damage Photos Upload Handler
+  const handleAddDamagePhotoFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (uploadEvent) => {
+        const url = uploadEvent.target?.result as string;
+        if (url) {
+          setDamagePhotos(prev => [...prev, url]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleAddDamageClaim = () => {
+    if (!damageContractor.trim() || !damageMaterial.trim() || damageAmount <= 0) return;
+
+    const newClaim: MaterialDamageEntry = {
+      id: 'dmg_' + Date.now(),
+      contractorOrWorkerName: damageContractor.trim(),
+      tradeOrAgency: damageTrade,
+      materialName: damageMaterial.trim(),
+      damageAmount: damageAmount,
+      description: damageDescription.trim() || 'Material damage on site',
+      photos: damagePhotos,
+      createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setReport(prev => ({
+      ...prev,
+      damageDeductions: [...(prev.damageDeductions || []), newClaim]
+    }));
+
+    setDamageContractor('');
+    setDamageTrade('Tiles');
+    setDamageMaterial('');
+    setDamageAmount(0);
+    setDamageDescription('');
+    setDamagePhotos([]);
+    setShowAddDamageForm(false);
+  };
+
+  const handleRemoveDamageClaim = (id: string) => {
+    setReport(prev => ({
+      ...prev,
+      damageDeductions: (prev.damageDeductions || []).filter(d => d.id !== id)
+    }));
+  };
+
+  // Image Upload Handlers for Work Photos
   const handleAddPhotos = (e: React.ChangeEvent<HTMLInputElement>, category: 'BEFORE' | 'AFTER') => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -272,6 +334,7 @@ export const WhatsAppReportModule: React.FC = () => {
     (report.bathkam?.breakerWork || 0);
 
   const totalCementBags = (report.cementStock || []).reduce((sum, c) => sum + (c.bags || 0), 0);
+  const totalDamageDeduction = (report.damageDeductions || []).reduce((sum, d) => sum + (d.damageAmount || 0), 0);
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-6 pb-24">
@@ -288,11 +351,11 @@ export const WhatsAppReportModule: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">WhatsApp Daily Report</h1>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold uppercase tracking-wider">
-                  Before & After Photos (Page 2)
+                  Material Damage & Deductions
                 </span>
               </div>
               <p className="text-xs text-zinc-400 mt-0.5">
-                Mark attendance, narrations, before & after work photos, and export executive PDF reports.
+                Mark attendance, narrations, before/after photos, damage deductions, and export PDF.
               </p>
             </div>
           </div>
@@ -313,7 +376,7 @@ export const WhatsAppReportModule: React.FC = () => {
               className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-zinc-950 font-bold text-xs flex items-center space-x-1.5 transition-all shadow-lg active:scale-95 disabled:opacity-50"
             >
               <FileText className="w-4 h-4" />
-              <span>{isGeneratingPdf ? 'Generating PDF...' : 'Download PDF (2 Pages)'}</span>
+              <span>{isGeneratingPdf ? 'Generating PDF...' : 'Download PDF Report'}</span>
             </button>
 
             <button
@@ -795,7 +858,7 @@ export const WhatsAppReportModule: React.FC = () => {
               </div>
             </div>
 
-            {/* NEW SECTION 6: BEFORE & AFTER WORK PROGRESS PHOTOS */}
+            {/* SECTION 6: BEFORE & AFTER WORK PROGRESS PHOTOS */}
             <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center space-x-2">
@@ -888,7 +951,7 @@ export const WhatsAppReportModule: React.FC = () => {
                               value={photo.caption}
                               onChange={e => handleUpdatePhotoCaption(photo.id, 'AFTER', e.target.value)}
                               className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-[11px] text-zinc-200 focus:border-emerald-500 focus:outline-none"
-                              placeholder="Photo caption (e.g. After 2nd coat tile laying)..."
+                              placeholder="Photo caption (e.g. After tile laying)..."
                             />
                             <span className="text-[9px] text-zinc-500 block mt-0.5">{photo.createdAt}</span>
                           </div>
@@ -908,6 +971,196 @@ export const WhatsAppReportModule: React.FC = () => {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* NEW SECTION 7: MATERIAL DAMAGE & CONTRACTOR BILL DEDUCTIONS */}
+            <div className="bg-zinc-900/90 border border-red-500/30 rounded-2xl p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <AlertTriangle className="w-4 h-4 text-red-400" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-red-400">
+                    7. Material Damage & Contractor Bill Deductions
+                  </h3>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs font-bold text-red-400 bg-red-500/10 px-2.5 py-0.5 rounded-full border border-red-500/30">
+                    Total Deduction: ₹{totalDamageDeduction.toLocaleString('en-IN')}
+                  </span>
+                  <button
+                    onClick={() => setShowAddDamageForm(!showAddDamageForm)}
+                    className="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300 text-xs font-bold flex items-center space-x-1.5 active:scale-95 transition"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Record Damage Claim</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Add Material Damage Claim Form */}
+              {showAddDamageForm && (
+                <div className="bg-zinc-950 border border-red-500/40 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                    <span className="text-xs font-bold text-red-400 uppercase tracking-wider">⚠️ New Material Damage & Bill Penalty Record</span>
+                    <button onClick={() => setShowAddDamageForm(false)} className="text-xs text-zinc-400 hover:text-white">✕</button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-[10px] text-zinc-400 mb-1">Contractor / Worker Responsible *</label>
+                      <input
+                        type="text"
+                        value={damageContractor}
+                        onChange={e => setDamageContractor(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-red-500 focus:outline-none"
+                        placeholder="e.g. Suraj Chauhan (Tiles)"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-zinc-400 mb-1">Trade / Agency Category</label>
+                      <select
+                        value={damageTrade}
+                        onChange={e => setDamageTrade(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-red-500 focus:outline-none"
+                      >
+                        <option value="Tiles">Tiles</option>
+                        <option value="Waterproofing">Waterproofing</option>
+                        <option value="Plumbing">Plumbing</option>
+                        <option value="Electrical">Electrical</option>
+                        <option value="Carpenter">Carpenter</option>
+                        <option value="Fitter">Steel Fitter</option>
+                        <option value="Fabrication">Fabrication</option>
+                        <option value="General Labour">General Labour</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-zinc-400 mb-1">Deduction Amount (₹) *</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={damageAmount || ''}
+                        onChange={e => setDamageAmount(parseFloat(e.target.value) || 0)}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-red-400 font-bold focus:border-red-500 focus:outline-none"
+                        placeholder="e.g. 2400"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[10px] text-zinc-400 mb-1">Material Damaged Details *</label>
+                      <input
+                        type="text"
+                        value={damageMaterial}
+                        onChange={e => setDamageMaterial(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 focus:border-red-500 focus:outline-none"
+                        placeholder="e.g. 600x600 Vitrified Tiles - 3 Boxes broken"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-zinc-400 mb-1">Reason / Description</label>
+                      <input
+                        type="text"
+                        value={damageDescription}
+                        onChange={e => setDamageDescription(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-300 focus:border-red-500 focus:outline-none"
+                        placeholder="e.g. Careless handling during material shifting..."
+                      />
+                    </div>
+                  </div>
+
+                  {/* Damage Evidence Photos Upload */}
+                  <div className="space-y-2 pt-1 border-t border-zinc-900">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] text-zinc-400">Attach Damage Evidence Photos</label>
+                      <label className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 cursor-pointer">
+                        + Upload Damage Photo
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={handleAddDamagePhotoFiles}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+
+                    {damagePhotos.length > 0 && (
+                      <div className="flex items-center space-x-2 overflow-x-auto py-1">
+                        {damagePhotos.map((url, pIdx) => (
+                          <div key={pIdx} className="relative group flex-shrink-0">
+                            <img src={url} alt="Damage" className="w-12 h-12 object-cover rounded border border-red-500/50" />
+                            <button
+                              onClick={() => setDamagePhotos(prev => prev.filter((_, idx) => idx !== pIdx))}
+                              className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end space-x-2 pt-2">
+                    <button
+                      onClick={() => setShowAddDamageForm(false)}
+                      className="px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs font-semibold"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleAddDamageClaim}
+                      className="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow"
+                    >
+                      Save Bill Deduction
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Recorded Damage Claims List */}
+              {report.damageDeductions && report.damageDeductions.length > 0 ? (
+                <div className="space-y-2">
+                  {report.damageDeductions.map(item => (
+                    <div key={item.id} className="bg-zinc-950 border border-red-500/30 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs font-bold text-white">{item.contractorOrWorkerName}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">
+                            {item.tradeOrAgency}
+                          </span>
+                          <span className="text-xs font-black text-red-400 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">
+                            -₹{item.damageAmount.toLocaleString('en-IN')} Deducted
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-zinc-300 font-medium">Material: {item.materialName}</div>
+                        <div className="text-[10px] text-zinc-400 italic">Reason: {item.description}</div>
+                      </div>
+
+                      <div className="flex items-center space-x-3">
+                        {item.photos && item.photos.length > 0 && (
+                          <div className="flex items-center space-x-1">
+                            {item.photos.map((pUrl, pIdx) => (
+                              <img key={pIdx} src={pUrl} alt="Damage evidence" className="w-10 h-10 object-cover rounded border border-red-500/30" />
+                            ))}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => handleRemoveDamageClaim(item.id)}
+                          className="p-1.5 rounded bg-zinc-900 hover:bg-red-500/20 text-zinc-500 hover:text-red-400 transition"
+                          title="Remove Damage Claim"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4 border border-dashed border-zinc-800 rounded-xl text-zinc-500 text-xs">
+                  No material damage deductions recorded for today.
+                </div>
+              )}
             </div>
 
           </div>
@@ -944,7 +1197,7 @@ export const WhatsAppReportModule: React.FC = () => {
                   className="w-full flex items-center justify-center space-x-2 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-zinc-950 font-bold text-xs transition active:scale-98 disabled:opacity-50"
                 >
                   <Download className="w-4 h-4" />
-                  <span>{isGeneratingPdf ? 'Generating PDF...' : `Download ${pdfTheme === 'light' ? 'Executive Print' : 'Modern Dark'} PDF (2 Pages)`}</span>
+                  <span>{isGeneratingPdf ? 'Generating PDF...' : `Download ${pdfTheme === 'light' ? 'Executive Print' : 'Modern Dark'} PDF`}</span>
                 </button>
 
                 <button
@@ -1035,7 +1288,7 @@ export const WhatsAppReportModule: React.FC = () => {
         </div>
       )}
 
-      {/* PRINTABLE HIDDEN PDF REPORT CONTAINER (2 PAGES: PAGE 1 MANPOWER & STOCK, PAGE 2 BEFORE & AFTER WORK PHOTOS) */}
+      {/* PRINTABLE HIDDEN PDF REPORT CONTAINER */}
       <div className="overflow-hidden h-0 w-0 pointer-events-none opacity-0">
         <div
           id="printable-dpr-pdf"
@@ -1064,7 +1317,7 @@ export const WhatsAppReportModule: React.FC = () => {
                     <span className="text-[10px] text-emerald-200 font-mono">DPR-OFFICIAL</span>
                   </div>
                   <h1 className="text-2xl font-black tracking-tight">{report.buildingName || 'B-Building Work Progress'}</h1>
-                  <div className="text-xs text-emerald-100 font-medium">Daily Site Operations & Manpower Progress Report (Page 1 of 2)</div>
+                  <div className="text-xs text-emerald-100 font-medium">Daily Site Operations & Manpower Progress Report</div>
                 </div>
 
                 <div className="text-right space-y-1">
@@ -1094,8 +1347,8 @@ export const WhatsAppReportModule: React.FC = () => {
                 </div>
 
                 <div className={`p-3 rounded-xl border text-center ${pdfTheme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-zinc-900 border-zinc-800'}`}>
-                  <div className={`text-[10px] font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-slate-500' : 'text-zinc-400'}`}>Cement Stock</div>
-                  <div className="text-xl font-black text-amber-600 mt-0.5">{totalCementBags} Bags</div>
+                  <div className={`text-[10px] font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-slate-500' : 'text-zinc-400'}`}>Bill Deductions</div>
+                  <div className="text-xl font-black text-red-600 mt-0.5">₹{totalDamageDeduction.toLocaleString('en-IN')}</div>
                 </div>
               </div>
 
@@ -1160,66 +1413,49 @@ export const WhatsAppReportModule: React.FC = () => {
                 </table>
               </div>
 
-              {/* Bathkam & Department Dual Tables */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* MATERIAL DAMAGE & BILL DEDUCTIONS TABLE IN PDF */}
+              {report.damageDeductions && report.damageDeductions.length > 0 && (
                 <div className="space-y-2">
-                  <h3 className={`text-xs font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-emerald-900' : 'text-emerald-400'}`}>
-                    2. Bathkam Breakdown (Total: {bathkamTotal})
-                  </h3>
-                  <table className={`w-full border-collapse border text-xs ${pdfTheme === 'light' ? 'border-slate-200' : 'border-zinc-800'}`}>
-                    <thead>
-                      <tr className={pdfTheme === 'light' ? 'bg-slate-100 text-slate-800 font-bold border-b border-slate-200' : 'bg-zinc-900 text-zinc-300 font-bold border-b border-zinc-800'}>
-                        <th className="p-2 text-left border-r border-slate-200">Activity</th>
-                        <th className="p-2 text-center w-20">Labour</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[
-                        { label: 'Plaster Work', count: report.bathkam?.plasterWork || 0 },
-                        { label: 'Material Shifting', count: report.bathkam?.materialShifting || 0 },
-                        { label: 'Brick Work', count: report.bathkam?.brickWork || 0 },
-                        { label: 'Bai (Female Labour)', count: report.bathkam?.baiLabour || 0 },
-                      ].map((row, idx) => (
-                        <tr key={idx} className={pdfTheme === 'light' ? (idx % 2 === 0 ? 'bg-white' : 'bg-slate-50') : (idx % 2 === 0 ? 'bg-zinc-950' : 'bg-zinc-900/60')}>
-                          <td className={`p-2 border-r ${pdfTheme === 'light' ? 'border-slate-200 text-slate-700' : 'border-zinc-800 text-zinc-300'}`}>{row.label}</td>
-                          <td className={`p-2 text-center font-bold ${pdfTheme === 'light' ? 'text-slate-900' : 'text-white'}`}>{row.count < 10 ? `0${row.count}` : row.count}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-red-700 flex items-center space-x-1.5">
+                      <span>⚠️ Material Damage & Contractor Bill Deductions</span>
+                    </h3>
+                    <span className="text-[10px] font-bold text-red-700 bg-red-100 border border-red-300 px-2 py-0.5 rounded">
+                      Total Bill Penalty: ₹{totalDamageDeduction.toLocaleString('en-IN')}
+                    </span>
+                  </div>
 
-                <div className="space-y-2">
-                  <h3 className={`text-xs font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-emerald-900' : 'text-emerald-400'}`}>
-                    3. Department & Operations
-                  </h3>
-                  <table className={`w-full border-collapse border text-xs ${pdfTheme === 'light' ? 'border-slate-200' : 'border-zinc-800'}`}>
+                  <table className="w-full border-collapse border border-slate-300 text-xs">
                     <thead>
-                      <tr className={pdfTheme === 'light' ? 'bg-slate-100 text-slate-800 font-bold border-b border-slate-200' : 'bg-zinc-900 text-zinc-300 font-bold border-b border-zinc-800'}>
-                        <th className="p-2 text-left border-r border-slate-200">Category</th>
-                        <th className="p-2 text-center w-20">Count</th>
+                      <tr className="bg-red-800 text-white font-bold">
+                        <th className="p-2 text-left w-44">Contractor / Worker</th>
+                        <th className="p-2 text-left w-56">Damaged Material</th>
+                        <th className="p-2 text-center w-28">Deduction (₹)</th>
+                        <th className="p-2 text-left">Damage Description & Reason</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {[
-                        { label: 'Department Staff', count: report.departmentStaffCount || 0 },
-                        { label: 'Department Labour', count: report.departmentLabourCount || 0 },
-                        { label: 'Breaker Work (Bathkam)', count: report.bathkam?.breakerWork || 0 },
-                      ].map((row, idx) => (
-                        <tr key={idx} className={pdfTheme === 'light' ? (idx % 2 === 0 ? 'bg-white' : 'bg-slate-50') : (idx % 2 === 0 ? 'bg-zinc-950' : 'bg-zinc-900/60')}>
-                          <td className={`p-2 border-r ${pdfTheme === 'light' ? 'border-slate-200 text-slate-700' : 'border-zinc-300 text-zinc-300'}`}>{row.label}</td>
-                          <td className={`p-2 text-center font-bold ${pdfTheme === 'light' ? 'text-slate-900' : 'text-white'}`}>{row.count < 10 ? `0${row.count}` : row.count}</td>
+                      {report.damageDeductions.map((dmg, idx) => (
+                        <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-red-50/40'}>
+                          <td className="p-2 font-bold text-slate-900 border-r border-slate-200">
+                            {dmg.contractorOrWorkerName} <span className="text-[10px] text-slate-500 font-normal">({dmg.tradeOrAgency})</span>
+                          </td>
+                          <td className="p-2 text-slate-800 border-r border-slate-200 font-medium">{dmg.materialName}</td>
+                          <td className="p-2 text-center font-bold text-red-700 border-r border-slate-200">
+                            -₹{dmg.damageAmount.toLocaleString('en-IN')}
+                          </td>
+                          <td className="p-2 text-slate-600 italic">{dmg.description}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              </div>
+              )}
 
               {/* Cement Stock Inventory */}
               <div className="space-y-2">
                 <h3 className={`text-xs font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-emerald-900' : 'text-emerald-400'}`}>
-                  4. Cement Stock Inventory (Total: {totalCementBags} Bags)
+                  2. Cement Stock Inventory (Total: {totalCementBags} Bags)
                 </h3>
                 <div className="grid grid-cols-4 gap-2 text-xs">
                   {report.cementStock.map((c, idx) => (
@@ -1261,7 +1497,7 @@ export const WhatsAppReportModule: React.FC = () => {
             </div>
           </div>
 
-          {/* PAGE 2: BEFORE & AFTER WORK PROGRESS PHOTOS */}
+          {/* PAGE 2: BEFORE & AFTER WORK PROGRESS PHOTOS & DAMAGE EVIDENCE */}
           <div className="p-8 space-y-6 min-h-[1100px] flex flex-col justify-between border-t-4 border-dashed border-emerald-500">
             <div className="space-y-6">
               {/* Page 2 Header Banner */}
@@ -1277,7 +1513,7 @@ export const WhatsAppReportModule: React.FC = () => {
                     PAGE 2 OF 2 — PHOTO DOCUMENTATION
                   </div>
                   <h2 className="text-xl font-black">{report.buildingName || 'B-Building Work Progress'}</h2>
-                  <div className="text-xs text-emerald-100 font-medium">Site Work Progress Photos (Before & After Execution)</div>
+                  <div className="text-xs text-emerald-100 font-medium">Site Work Progress & Material Damage Photo Audit</div>
                 </div>
                 <div className="text-right">
                   <div className="text-sm font-bold text-white">{report.reportDate}</div>

@@ -336,6 +336,27 @@ export interface ReportWorkPhoto {
   createdAt: string;
 }
 
+export interface MaterialDamageEntry {
+  id: string;
+  contractorOrWorkerName: string;
+  tradeOrAgency: string;
+  materialName: string;
+  damageAmount: number; // Deduction amount in Rupees (₹)
+  description: string;
+  photos: string[]; // Base64 image URLs
+  createdAt: string;
+}
+
+export interface WorkerAttendanceRecord {
+  id: string;
+  workerName: string;
+  tradeOrRole: string;
+  contractorName?: string;
+  status: 'PRESENT' | 'HALF_DAY' | 'ABSENT' | 'OVERTIME';
+  hoursWorked?: number;
+  dailyWageRate?: number;
+}
+
 export interface DailyProgressReport {
   id: number;
   reportDate: string; // YYYY-MM-DD or DD/MM/YYYY
@@ -382,6 +403,12 @@ export interface DailyProgressReport {
   // Work Progress Photos (Before & After)
   beforePhotos?: ReportWorkPhoto[];
   afterPhotos?: ReportWorkPhoto[];
+
+  // Material Damage & Bill Deductions
+  damageDeductions?: MaterialDamageEntry[];
+
+  // Individual Worker Attendance Logs
+  workerAttendanceLogs?: WorkerAttendanceRecord[];
 
   createdByName?: string;
   createdAt?: string;
