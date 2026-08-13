@@ -117,6 +117,7 @@ function loadInitialState(): SiteOpsState {
         return {
           ...parsed,
           sites: parsed.sites?.length ? parsed.sites : INITIAL_SITES,
+          contractorsMaster: parsed.contractorsMaster?.length ? parsed.contractorsMaster : INITIAL_CONTRACTORS_MASTER,
           materialCategories: parsed.materialCategories?.length ? parsed.materialCategories : INITIAL_MATERIAL_CATEGORIES,
           expenseCategories: parsed.expenseCategories?.length ? parsed.expenseCategories : INITIAL_EXPENSE_CATEGORIES,
           equipmentTypes: parsed.equipmentTypes?.length ? parsed.equipmentTypes : INITIAL_EQUIPMENT_TYPES,
@@ -157,6 +158,7 @@ function loadInitialState(): SiteOpsState {
 
   return {
     sites: INITIAL_SITES,
+    contractorsMaster: INITIAL_CONTRACTORS_MASTER,
     materialCategories: INITIAL_MATERIAL_CATEGORIES,
     suppliers: [],
     materialInward: [],
