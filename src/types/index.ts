@@ -1,4 +1,14 @@
-export type ModuleTab = 'dashboard' | 'material' | 'cash' | 'machinery' | 'visitor' | 'safety' | 'quality' | 'whatsappReport';
+export type ModuleTab = 'dashboard' | 'material' | 'cash' | 'machinery' | 'visitor' | 'safety' | 'quality' | 'whatsappReport' | 'databaseManager';
+
+export interface ContractorMaster {
+  id: number;
+  name: string;
+  trade: string; // e.g. Tiles, Waterproofing, Plumbing, Electrical
+  phone?: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  defaultRatePerWorker?: number;
+  notes?: string;
+}
 
 // ==========================================
 // 1. MATERIAL & INVENTORY MANAGEMENT

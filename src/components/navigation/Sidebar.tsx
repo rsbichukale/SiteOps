@@ -29,6 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const menuItems = [
     { id: 'dashboard' as ModuleTab, label: 'Home Dashboard', icon: LayoutDashboard, desc: 'Overview of all site operations' },
     { id: 'whatsappReport' as ModuleTab, label: 'WhatsApp Daily DPR', icon: MessageSquare, desc: 'Generate & send daily progress report' },
+    { id: 'databaseManager' as ModuleTab, label: 'Database & Master Records', icon: Database, desc: 'Add, Edit, Delete Master Data' },
     { id: 'material' as ModuleTab, label: 'Material & Inventory', icon: Package, desc: 'GRN, Stock Ledger, Material Issue' },
     { id: 'cash' as ModuleTab, label: 'Petty Cash & Expenses', icon: Banknote, desc: 'Daily Expenses, Fund Requisitions' },
     { id: 'machinery' as ModuleTab, label: 'Machinery & Equipment', icon: Truck, desc: 'Usage Logs, Rental Billing, Fuel' },

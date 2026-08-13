@@ -43,14 +43,23 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectTab }) => 
             </p>
           </div>
 
-          <button
-            onClick={() => onSelectTab('whatsappReport')}
-            className="flex items-center space-x-2.5 px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-zinc-950 font-bold text-xs shadow-xl shadow-emerald-500/20 active:scale-95 transition-all self-start md:self-auto"
-          >
-            <MessageSquare className="w-4 h-4" />
-            <span>Generate Today's WhatsApp DPR</span>
-            <Share2 className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center space-x-2 self-start md:self-auto">
+            <button
+              onClick={() => onSelectTab('databaseManager')}
+              className="flex items-center space-x-2 px-4 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-xs border border-zinc-700 transition"
+            >
+              <span>🗄️ Database & Masters</span>
+            </button>
+
+            <button
+              onClick={() => onSelectTab('whatsappReport')}
+              className="flex items-center space-x-2.5 px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-zinc-950 font-bold text-xs shadow-xl shadow-emerald-500/20 active:scale-95 transition-all"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span>Generate WhatsApp DPR</span>
+              <Share2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 

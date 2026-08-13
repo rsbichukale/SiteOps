@@ -12,10 +12,19 @@ import {
   INITIAL_EQUIPMENT_TYPES, INITIAL_SAFETY_CHECK_ITEMS
 } from './seedMasters';
 
+import { ContractorMaster } from '../types';
+
 const LOCAL_STORAGE_KEY = 'siteops_app_state_v1';
+
+export const INITIAL_CONTRACTORS_MASTER: ContractorMaster[] = [
+  { id: 1, name: 'Suraj Chauhan', trade: 'Tiles', phone: '+91 98220 12345', status: 'ACTIVE', notes: 'Window and door frame, kitchen bottom & top, wall tiles' },
+  { id: 2, name: 'Mohan Khetawat', trade: 'Waterproofing', phone: '+91 98220 67890', status: 'ACTIVE', notes: 'Terrace & slab waterproofing' },
+  { id: 3, name: 'Naresh Khetawat', trade: 'Waterproofing', phone: '+91 98220 54321', status: 'ACTIVE', notes: 'Toilet, balcony & shaft waterproofing' },
+];
 
 export interface SiteOpsState {
   sites: Site[];
+  contractorsMaster: ContractorMaster[];
   materialCategories: MaterialCategory[];
   suppliers: Supplier[];
   materialInward: MaterialInward[];
@@ -351,5 +360,52 @@ export function saveDailyReport(report: DailyProgressReport) {
   }
   
   saveAppState({ dailyReports: updatedReports });
+}
+
+export function deleteDailyReport(id: number) {
+  const state = getAppState();
+  const updatedReports = state.dailyReports.filter(r => r.id !== id);
+  saveAppState({ dailyReports: updatedReports });
+}
+
+export function saveContractor(contractor: ContractorMaster) {
+  const state = getAppState();
+  const existingIdx = state.contractorsMaster.findIndex(c => c.id === contractor.id);
+  
+  let updated: ContractorMaster[];
+  if (existingIdx > -1) {
+    updated = [...state.contractorsMaster];
+    updated[existingIdx] = contractor;
+  } else {
+    const newId = state.contractorsMaster.length > 0 ? Math.max(...state.contractorsMaster.map(c => c.id)) + 1 : 1;
+    updated = [{ ...contractor, id: newId }, ...state.contractorsMaster];
+  }
+  
+  saveAppState({ contractorsMaster: updated });
+}
+
+export function deleteContractor(id: number) {
+  const state = getAppState();
+  const updated = state.contractorsMaster.filter(c => c.id !== id);
+  saveAppState({ contractorsMaster: updated });
+}
+
+export function exportDatabaseBackup(): string {
+  const state = getAppState();
+  return JSON.stringify(state, null, 2);
+}
+
+export function importDatabaseBackup(jsonContent: string): boolean {
+  try {
+    const parsed = JSON.parse(jsonContent);
+    if (typeof parsed === 'object' && parsed !== null) {
+      saveAppState(parsed);
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.error('Failed to import database backup', err);
+    return false;
+  }
 }
 

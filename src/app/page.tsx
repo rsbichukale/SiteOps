@@ -13,6 +13,7 @@ import { VisitorModule } from '@/components/modules/visitor/VisitorModule';
 import { SafetyModule } from '@/components/modules/safety/SafetyModule';
 import { QualityModule } from '@/components/modules/quality/QualityModule';
 import { WhatsAppReportModule } from '@/components/modules/reports/WhatsAppReportModule';
+import { DatabaseManagerModule } from '@/components/modules/database/DatabaseManagerModule';
 
 import { ModuleTab, AppUser } from '@/types';
 import { getAppState, saveAppState, subscribeState } from '@/lib/dbState';
@@ -77,6 +78,7 @@ export default function SiteOpsApp() {
       <main className="flex-1">
         {activeTab === 'dashboard' && <HomeDashboard onSelectTab={setActiveTab} />}
         {activeTab === 'whatsappReport' && <WhatsAppReportModule />}
+        {activeTab === 'databaseManager' && <DatabaseManagerModule />}
         {activeTab === 'material' && <MaterialModule />}
         {activeTab === 'cash' && <CashModule />}
         {activeTab === 'machinery' && <MachineryModule />}
