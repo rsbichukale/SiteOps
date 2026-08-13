@@ -3,9 +3,9 @@
 import React, { useState } from 'react';
 import {
   MessageSquare, Share2, Copy, Check, Calendar, Building, Users, HardHat,
-  Package, Sparkles, Plus, Minus, RotateCcw, Clock, Save, History, FileText, Download, Sun, Moon, Trash2
+  Package, Sparkles, Plus, Minus, RotateCcw, Clock, Save, History, FileText, Download, Sun, Moon, Trash2, Camera, Image as ImageIcon
 } from 'lucide-react';
-import { DailyProgressReport, CementStockEntry, CustomTradeEntry } from '@/types';
+import { DailyProgressReport, CementStockEntry, CustomTradeEntry, ReportWorkPhoto } from '@/types';
 import { getAppState, saveDailyReport, generateWhatsAppReportText, DEFAULT_SAMPLE_REPORT } from '@/lib/dbState';
 import { downloadDPRPdfReport } from '@/lib/pdfReportGenerator';
 
@@ -16,6 +16,26 @@ export const WhatsAppReportModule: React.FC = () => {
   const [report, setReport] = useState<DailyProgressReport>({
     ...latestSavedReport,
     reportDate: new Date().toLocaleDateString('en-GB'), // e.g. 13/08/2026
+    carpenterCount: 0,
+    fitterCount: 0,
+    electricalCount: 0,
+    plumberCount: 0,
+    coreCuttingCount: 0,
+    fabricationCount: 0,
+    surajChauhanTilesCount: 0,
+    mohanKhetawatWaterproofingCount: 0,
+    nareshKhetawatWaterproofingCount: 0,
+    bathkam: {
+      plasterWork: 0,
+      materialShifting: 0,
+      brickWork: 0,
+      baiLabour: 0,
+      breakerWork: 0,
+    },
+    departmentStaffCount: 0,
+    departmentLabourCount: 0,
+    beforePhotos: latestSavedReport.beforePhotos || [],
+    afterPhotos: latestSavedReport.afterPhotos || [],
   });
 
   const [copied, setCopied] = useState(false);
@@ -118,6 +138,60 @@ export const WhatsAppReportModule: React.FC = () => {
     }));
   };
 
+  // Image Upload Handlers
+  const handleAddPhotos = (e: React.ChangeEvent<HTMLInputElement>, category: 'BEFORE' | 'AFTER') => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (uploadEvent) => {
+        const url = uploadEvent.target?.result as string;
+        if (!url) return;
+
+        const newPhoto: ReportWorkPhoto = {
+          id: 'photo_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+          url,
+          caption: file.name.replace(/\.[^/.]+$/, ''),
+          category,
+          createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+
+        setReport(prev => {
+          const key = category === 'BEFORE' ? 'beforePhotos' : 'afterPhotos';
+          const currentList = prev[key] || [];
+          return {
+            ...prev,
+            [key]: [...currentList, newPhoto]
+          };
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleRemovePhoto = (photoId: string, category: 'BEFORE' | 'AFTER') => {
+    setReport(prev => {
+      const key = category === 'BEFORE' ? 'beforePhotos' : 'afterPhotos';
+      const currentList = prev[key] || [];
+      return {
+        ...prev,
+        [key]: currentList.filter(p => p.id !== photoId)
+      };
+    });
+  };
+
+  const handleUpdatePhotoCaption = (photoId: string, category: 'BEFORE' | 'AFTER', caption: string) => {
+    setReport(prev => {
+      const key = category === 'BEFORE' ? 'beforePhotos' : 'afterPhotos';
+      const currentList = prev[key] || [];
+      return {
+        ...prev,
+        [key]: currentList.map(p => p.id === photoId ? { ...p, caption } : p)
+      };
+    });
+  };
+
   const updateNumber = (field: keyof DailyProgressReport, delta: number) => {
     setReport(prev => {
       const currentVal = (prev[field] as number) || 0;
@@ -214,11 +288,11 @@ export const WhatsAppReportModule: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">WhatsApp Daily Report</h1>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold uppercase tracking-wider">
-                  Custom Trades Supported
+                  Before & After Photos (Page 2)
                 </span>
               </div>
               <p className="text-xs text-zinc-400 mt-0.5">
-                Generate today's site progress update, add custom trades/contractors, and export executive PDF reports.
+                Mark attendance, narrations, before & after work photos, and export executive PDF reports.
               </p>
             </div>
           </div>
@@ -239,7 +313,7 @@ export const WhatsAppReportModule: React.FC = () => {
               className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-zinc-950 font-bold text-xs flex items-center space-x-1.5 transition-all shadow-lg active:scale-95 disabled:opacity-50"
             >
               <FileText className="w-4 h-4" />
-              <span>{isGeneratingPdf ? 'Generating PDF...' : 'Download PDF'}</span>
+              <span>{isGeneratingPdf ? 'Generating PDF...' : 'Download PDF (2 Pages)'}</span>
             </button>
 
             <button
@@ -305,7 +379,7 @@ export const WhatsAppReportModule: React.FC = () => {
 
           <div className="flex items-center space-x-3">
             <div className="flex items-center space-x-1.5 bg-zinc-950/80 border border-zinc-800 rounded-lg p-1">
-              <span className="text-[10px] text-zinc-400 px-1 font-medium">PDF Background:</span>
+              <span className="text-[10px] text-zinc-400 px-1 font-medium">PDF Theme:</span>
               <button
                 onClick={() => setPdfTheme('light')}
                 className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center space-x-1 transition ${
@@ -378,12 +452,12 @@ export const WhatsAppReportModule: React.FC = () => {
               </div>
             </div>
 
-            {/* Skilled Trades & Contractors (With Narrations & Add Custom Trade Button!) */}
+            {/* Skilled Trades & Contractors */}
             <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center space-x-2">
                   <HardHat className="w-4 h-4" />
-                  <span>2. Trades & Contractor Agencies</span>
+                  <span>2. Mark Attendance & Narrations</span>
                 </h3>
                 <button
                   onClick={() => setShowAddTradeForm(!showAddTradeForm)}
@@ -396,7 +470,7 @@ export const WhatsAppReportModule: React.FC = () => {
 
               {/* Add Custom Trade Form Drawer */}
               {showAddTradeForm && (
-                <div className="bg-zinc-950 border border-emerald-500/40 rounded-xl p-3.5 space-y-3 animate-fadeIn">
+                <div className="bg-zinc-950 border border-emerald-500/40 rounded-xl p-3.5 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">➕ Add New Custom Trade / Contractor</span>
                     <button onClick={() => setShowAddTradeForm(false)} className="text-xs text-zinc-400 hover:text-white">✕</button>
@@ -414,7 +488,7 @@ export const WhatsAppReportModule: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] text-zinc-400 mb-1">Contractor / Agency Name (Optional)</label>
+                      <label className="block text-[10px] text-zinc-400 mb-1">Contractor Name (Optional)</label>
                       <input
                         type="text"
                         value={newContractorName}
@@ -509,7 +583,7 @@ export const WhatsAppReportModule: React.FC = () => {
                   </div>
                 ))}
 
-                {/* Custom Trades Dynamic List */}
+                {/* Custom Trades List */}
                 {report.customTrades && report.customTrades.length > 0 && (
                   <div className="pt-2 border-t border-zinc-800 space-y-3">
                     <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider block">Custom Added Trades ({report.customTrades.length})</span>
@@ -721,6 +795,121 @@ export const WhatsAppReportModule: React.FC = () => {
               </div>
             </div>
 
+            {/* NEW SECTION 6: BEFORE & AFTER WORK PROGRESS PHOTOS */}
+            <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center space-x-2">
+                  <Camera className="w-4 h-4" />
+                  <span>6. Site Work Progress Photos (Before & After)</span>
+                </h3>
+                <span className="text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                  Renders on PDF Page 2
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* BEFORE WORK PHOTOS UPLOAD */}
+                <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-400 flex items-center space-x-1.5">
+                      <ImageIcon className="w-4 h-4" />
+                      <span>Before Work Photos ({report.beforePhotos?.length || 0})</span>
+                    </span>
+                    <label className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 text-xs font-bold cursor-pointer transition">
+                      + Add Photos
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={e => handleAddPhotos(e, 'BEFORE')}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {report.beforePhotos && report.beforePhotos.length > 0 ? (
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                      {report.beforePhotos.map(photo => (
+                        <div key={photo.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-2 flex items-center space-x-3">
+                          <img src={photo.url} alt="Before" className="w-12 h-12 object-cover rounded-md border border-zinc-700" />
+                          <div className="flex-1 min-w-0">
+                            <input
+                              type="text"
+                              value={photo.caption}
+                              onChange={e => handleUpdatePhotoCaption(photo.id, 'BEFORE', e.target.value)}
+                              className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-[11px] text-zinc-200 focus:border-amber-500 focus:outline-none"
+                              placeholder="Photo caption (e.g. Before waterproofing)..."
+                            />
+                            <span className="text-[9px] text-zinc-500 block mt-0.5">{photo.createdAt}</span>
+                          </div>
+                          <button
+                            onClick={() => handleRemovePhoto(photo.id, 'BEFORE')}
+                            className="text-zinc-500 hover:text-red-400 p-1"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 border-2 border-dashed border-zinc-800 rounded-lg text-zinc-500 text-xs">
+                      No Before Work Photos Added
+                    </div>
+                  )}
+                </div>
+
+                {/* AFTER WORK PHOTOS UPLOAD */}
+                <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-400 flex items-center space-x-1.5">
+                      <ImageIcon className="w-4 h-4" />
+                      <span>After Work Photos ({report.afterPhotos?.length || 0})</span>
+                    </span>
+                    <label className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 text-xs font-bold cursor-pointer transition">
+                      + Add Photos
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={e => handleAddPhotos(e, 'AFTER')}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {report.afterPhotos && report.afterPhotos.length > 0 ? (
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                      {report.afterPhotos.map(photo => (
+                        <div key={photo.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-2 flex items-center space-x-3">
+                          <img src={photo.url} alt="After" className="w-12 h-12 object-cover rounded-md border border-zinc-700" />
+                          <div className="flex-1 min-w-0">
+                            <input
+                              type="text"
+                              value={photo.caption}
+                              onChange={e => handleUpdatePhotoCaption(photo.id, 'AFTER', e.target.value)}
+                              className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-[11px] text-zinc-200 focus:border-emerald-500 focus:outline-none"
+                              placeholder="Photo caption (e.g. After 2nd coat tile laying)..."
+                            />
+                            <span className="text-[9px] text-zinc-500 block mt-0.5">{photo.createdAt}</span>
+                          </div>
+                          <button
+                            onClick={() => handleRemovePhoto(photo.id, 'AFTER')}
+                            className="text-zinc-500 hover:text-red-400 p-1"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 border-2 border-dashed border-zinc-800 rounded-lg text-zinc-500 text-xs">
+                      No After Work Photos Added
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
           </div>
 
           {/* Right Column: Live WhatsApp Markdown Card & Actions (5 Cols) */}
@@ -755,7 +944,7 @@ export const WhatsAppReportModule: React.FC = () => {
                   className="w-full flex items-center justify-center space-x-2 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-zinc-950 font-bold text-xs transition active:scale-98 disabled:opacity-50"
                 >
                   <Download className="w-4 h-4" />
-                  <span>{isGeneratingPdf ? 'Generating PDF...' : `Download ${pdfTheme === 'light' ? 'Executive Print' : 'Modern Dark'} PDF`}</span>
+                  <span>{isGeneratingPdf ? 'Generating PDF...' : `Download ${pdfTheme === 'light' ? 'Executive Print' : 'Modern Dark'} PDF (2 Pages)`}</span>
                 </button>
 
                 <button
@@ -846,225 +1035,343 @@ export const WhatsAppReportModule: React.FC = () => {
         </div>
       )}
 
-      {/* PRINTABLE HIDDEN PDF REPORT CONTAINER (DYNAMIC CUSTOM TRADES & THEME SUPPORT) */}
+      {/* PRINTABLE HIDDEN PDF REPORT CONTAINER (2 PAGES: PAGE 1 MANPOWER & STOCK, PAGE 2 BEFORE & AFTER WORK PHOTOS) */}
       <div className="overflow-hidden h-0 w-0 pointer-events-none opacity-0">
         <div
           id="printable-dpr-pdf"
-          className={`w-[800px] p-8 font-sans space-y-6 ${
+          className={`w-[800px] font-sans ${
             pdfTheme === 'light'
               ? 'bg-white text-slate-900'
               : 'bg-zinc-950 text-zinc-100'
           }`}
         >
-          {/* Header Banner */}
-          <div
-            className={`p-6 rounded-2xl flex items-center justify-between ${
-              pdfTheme === 'light'
-                ? 'bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 text-white shadow-md'
-                : 'bg-gradient-to-r from-zinc-900 via-emerald-950 to-zinc-900 text-white border border-emerald-500/30'
-            }`}
-          >
-            <div className="space-y-1">
-              <div className="flex items-center space-x-2">
-                <span className="text-[10px] font-bold uppercase tracking-widest bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 px-2 py-0.5 rounded-full">
-                  CONSTRUCTTRACK SITEOPS
-                </span>
-                <span className="text-[10px] text-emerald-200 font-mono">DPR-OFFICIAL</span>
-              </div>
-              <h1 className="text-2xl font-black tracking-tight">{report.buildingName || 'B-Building Work Progress'}</h1>
-              <div className="text-xs text-emerald-100 font-medium">Daily Site Operations & Manpower Progress Report</div>
-            </div>
-
-            <div className="text-right space-y-1">
-              <div className="text-xs text-emerald-200 font-medium">Report Date</div>
-              <div className="text-lg font-bold text-white font-mono">{report.reportDate}</div>
-              <div className="inline-block bg-white/20 backdrop-blur-md px-3 py-1 rounded-lg text-xs font-bold text-white border border-white/30">
-                {totalManpower} TOTAL WORKERS
-              </div>
-            </div>
-          </div>
-
-          {/* Metric Cards Summary Bar */}
-          <div className="grid grid-cols-4 gap-3">
-            <div className={`p-3 rounded-xl border text-center ${pdfTheme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-zinc-900 border-zinc-800'}`}>
-              <div className={`text-[10px] font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-slate-500' : 'text-zinc-400'}`}>Total Manpower</div>
-              <div className="text-xl font-black text-emerald-600 mt-0.5">{totalManpower}</div>
-            </div>
-
-            <div className={`p-3 rounded-xl border text-center ${pdfTheme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-zinc-900 border-zinc-800'}`}>
-              <div className={`text-[10px] font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-slate-500' : 'text-zinc-400'}`}>Skilled Trades</div>
-              <div className="text-xl font-black text-emerald-600 mt-0.5">{skilledTradesTotal}</div>
-            </div>
-
-            <div className={`p-3 rounded-xl border text-center ${pdfTheme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-zinc-900 border-zinc-800'}`}>
-              <div className={`text-[10px] font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-slate-500' : 'text-zinc-400'}`}>Bathkam Labour</div>
-              <div className="text-xl font-black text-emerald-600 mt-0.5">{bathkamTotal}</div>
-            </div>
-
-            <div className={`p-3 rounded-xl border text-center ${pdfTheme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-zinc-900 border-zinc-800'}`}>
-              <div className={`text-[10px] font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-slate-500' : 'text-zinc-400'}`}>Cement Stock</div>
-              <div className="text-xl font-black text-amber-600 mt-0.5">{totalCementBags} Bags</div>
-            </div>
-          </div>
-
-          {/* Main Trades Table (Default Trades + Custom Trades!) */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h3 className={`text-xs font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-emerald-900' : 'text-emerald-400'}`}>
-                1. Skilled Trades & Contractor Activities
-              </h3>
-              <span className={`text-[10px] ${pdfTheme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>
-                Sub-Total: {skilledTradesTotal} Skilled Workers
-              </span>
-            </div>
-
-            <table className={`w-full border-collapse border text-xs ${pdfTheme === 'light' ? 'border-slate-200' : 'border-zinc-800'}`}>
-              <thead>
-                <tr className={pdfTheme === 'light' ? 'bg-emerald-800 text-white font-bold' : 'bg-zinc-900 text-zinc-300 font-bold border-b border-zinc-800'}>
-                  <th className="p-2.5 text-left border-r border-emerald-700/40 w-56">Trade / Agency</th>
-                  <th className="p-2.5 text-center border-r border-emerald-700/40 w-24">Count</th>
-                  <th className="p-2.5 text-left">Work Scope & Activity Narration</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  { trade: 'Carpenter', count: report.carpenterCount, notes: report.carpenterNotes },
-                  { trade: 'Steel Fitter', count: report.fitterCount, notes: report.fitterNotes },
-                  { trade: 'Electrical', count: report.electricalCount, notes: report.electricalNotes },
-                  { trade: 'Tiles (Suraj Chauhan)', count: report.surajChauhanTilesCount, notes: report.surajChauhanNotes || 'window and door frame and kitchen bottom & top laying & kitchen wall tiles laying' },
-                  { trade: 'Waterproofing (Mohan Khetawat)', count: report.mohanKhetawatWaterproofingCount, notes: report.mohanKhetawatNotes || 'water proofing' },
-                  { trade: 'Waterproofing (Naresh Khetawat)', count: report.nareshKhetawatWaterproofingCount, notes: report.nareshKhetawatNotes || 'water proofing' },
-                  { trade: 'Plumber', count: report.plumberCount, notes: report.plumberNotes },
-                  { trade: 'Core Cutting', count: report.coreCuttingCount, notes: report.coreCuttingNotes },
-                  { trade: 'Fabrication', count: report.fabricationCount, notes: report.fabricationNotes },
-                  ...(report.customTrades || []).map(ct => ({
-                    trade: ct.contractorName ? `${ct.tradeName} (${ct.contractorName})` : ct.tradeName,
-                    count: ct.count,
-                    notes: ct.notes || '-'
-                  }))
-                ].map((row, idx) => (
-                  <tr
-                    key={idx}
-                    className={
-                      pdfTheme === 'light'
-                        ? idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'
-                        : idx % 2 === 0 ? 'bg-zinc-950' : 'bg-zinc-900/60'
-                    }
-                  >
-                    <td className={`p-2.5 font-bold border-r ${pdfTheme === 'light' ? 'border-slate-200 text-slate-800' : 'border-zinc-800 text-zinc-200'}`}>
-                      {row.trade}
-                    </td>
-                    <td className={`p-2.5 text-center font-bold border-r ${pdfTheme === 'light' ? 'border-slate-200 text-emerald-800' : 'border-zinc-800 text-emerald-400'}`}>
-                      <span className={`inline-block px-2.5 py-0.5 rounded-full ${pdfTheme === 'light' ? 'bg-emerald-100 border border-emerald-300' : 'bg-emerald-500/20 border border-emerald-500/30'}`}>
-                        {row.count < 10 ? `0${row.count}` : row.count}
-                      </span>
-                    </td>
-                    <td className={`p-2.5 italic ${pdfTheme === 'light' ? 'text-slate-600' : 'text-zinc-400'}`}>
-                      {row.notes ? row.notes : '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Bathkam & Department Dual Tables */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* Bathkam Table */}
-            <div className="space-y-2">
-              <h3 className={`text-xs font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-emerald-900' : 'text-emerald-400'}`}>
-                2. Bathkam Breakdown (Total: {bathkamTotal})
-              </h3>
-              <table className={`w-full border-collapse border text-xs ${pdfTheme === 'light' ? 'border-slate-200' : 'border-zinc-800'}`}>
-                <thead>
-                  <tr className={pdfTheme === 'light' ? 'bg-slate-100 text-slate-800 font-bold border-b border-slate-200' : 'bg-zinc-900 text-zinc-300 font-bold border-b border-zinc-800'}>
-                    <th className="p-2 text-left border-r border-slate-200">Activity</th>
-                    <th className="p-2 text-center w-20">Labour Count</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    { label: 'Plaster Work', count: report.bathkam?.plasterWork || 0 },
-                    { label: 'Material Shifting', count: report.bathkam?.materialShifting || 0 },
-                    { label: 'Brick Work', count: report.bathkam?.brickWork || 0 },
-                    { label: 'Bai (Female Labour)', count: report.bathkam?.baiLabour || 0 },
-                  ].map((row, idx) => (
-                    <tr key={idx} className={pdfTheme === 'light' ? (idx % 2 === 0 ? 'bg-white' : 'bg-slate-50') : (idx % 2 === 0 ? 'bg-zinc-950' : 'bg-zinc-900/60')}>
-                      <td className={`p-2 border-r ${pdfTheme === 'light' ? 'border-slate-200 text-slate-700' : 'border-zinc-800 text-zinc-300'}`}>{row.label}</td>
-                      <td className={`p-2 text-center font-bold ${pdfTheme === 'light' ? 'text-slate-900' : 'text-white'}`}>{row.count < 10 ? `0${row.count}` : row.count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Department Table */}
-            <div className="space-y-2">
-              <h3 className={`text-xs font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-emerald-900' : 'text-emerald-400'}`}>
-                3. Department & Operations
-              </h3>
-              <table className={`w-full border-collapse border text-xs ${pdfTheme === 'light' ? 'border-slate-200' : 'border-zinc-800'}`}>
-                <thead>
-                  <tr className={pdfTheme === 'light' ? 'bg-slate-100 text-slate-800 font-bold border-b border-slate-200' : 'bg-zinc-900 text-zinc-300 font-bold border-b border-zinc-800'}>
-                    <th className="p-2 text-left border-r border-slate-200">Category</th>
-                    <th className="p-2 text-center w-20">Count</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    { label: 'Department Staff', count: report.departmentStaffCount || 0 },
-                    { label: 'Department Labour', count: report.departmentLabourCount || 0 },
-                    { label: 'Breaker Work (Bathkam)', count: report.bathkam?.breakerWork || 0 },
-                  ].map((row, idx) => (
-                    <tr key={idx} className={pdfTheme === 'light' ? (idx % 2 === 0 ? 'bg-white' : 'bg-slate-50') : (idx % 2 === 0 ? 'bg-zinc-950' : 'bg-zinc-900/60')}>
-                      <td className={`p-2 border-r ${pdfTheme === 'light' ? 'border-slate-200 text-slate-700' : 'border-zinc-300 text-zinc-300'}`}>{row.label}</td>
-                      <td className={`p-2 text-center font-bold ${pdfTheme === 'light' ? 'text-slate-900' : 'text-white'}`}>{row.count < 10 ? `0${row.count}` : row.count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Cement Stock Inventory */}
-          <div className="space-y-2">
-            <h3 className={`text-xs font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-emerald-900' : 'text-emerald-400'}`}>
-              4. Cement Stock Inventory (Total: {totalCementBags} Bags)
-            </h3>
-            <div className="grid grid-cols-4 gap-2.5 text-xs">
-              {report.cementStock.map((c, idx) => (
-                <div
-                  key={idx}
-                  className={`p-3 rounded-xl border text-center ${
-                    pdfTheme === 'light'
-                      ? 'bg-slate-50 border-slate-200'
-                      : 'bg-zinc-900 border-zinc-800'
-                  }`}
-                >
-                  <div className={`text-[10px] font-bold ${pdfTheme === 'light' ? 'text-slate-600' : 'text-zinc-400'}`}>
-                    {c.brandName} {c.type ? `(${c.type})` : ''}
+          {/* PAGE 1: MANPOWER & STOCK REPORT */}
+          <div className="p-8 space-y-6 min-h-[1100px] flex flex-col justify-between">
+            <div className="space-y-6">
+              {/* Header Banner */}
+              <div
+                className={`p-6 rounded-2xl flex items-center justify-between ${
+                  pdfTheme === 'light'
+                    ? 'bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 text-white shadow-md'
+                    : 'bg-gradient-to-r from-zinc-900 via-emerald-950 to-zinc-900 text-white border border-emerald-500/30'
+                }`}
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[10px] font-bold uppercase tracking-widest bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 px-2 py-0.5 rounded-full">
+                      CONSTRUCTTRACK SITEOPS
+                    </span>
+                    <span className="text-[10px] text-emerald-200 font-mono">DPR-OFFICIAL</span>
                   </div>
-                  <div className="text-base font-black text-amber-600 mt-0.5">{c.bags} Bags</div>
+                  <h1 className="text-2xl font-black tracking-tight">{report.buildingName || 'B-Building Work Progress'}</h1>
+                  <div className="text-xs text-emerald-100 font-medium">Daily Site Operations & Manpower Progress Report (Page 1 of 2)</div>
                 </div>
-              ))}
+
+                <div className="text-right space-y-1">
+                  <div className="text-xs text-emerald-200 font-medium">Report Date</div>
+                  <div className="text-lg font-bold text-white font-mono">{report.reportDate}</div>
+                  <div className="inline-block bg-white/20 backdrop-blur-md px-3 py-1 rounded-lg text-xs font-bold text-white border border-white/30">
+                    {totalManpower} TOTAL WORKERS
+                  </div>
+                </div>
+              </div>
+
+              {/* Metric Cards Summary Bar */}
+              <div className="grid grid-cols-4 gap-3">
+                <div className={`p-3 rounded-xl border text-center ${pdfTheme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-zinc-900 border-zinc-800'}`}>
+                  <div className={`text-[10px] font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-slate-500' : 'text-zinc-400'}`}>Total Manpower</div>
+                  <div className="text-xl font-black text-emerald-600 mt-0.5">{totalManpower}</div>
+                </div>
+
+                <div className={`p-3 rounded-xl border text-center ${pdfTheme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-zinc-900 border-zinc-800'}`}>
+                  <div className={`text-[10px] font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-slate-500' : 'text-zinc-400'}`}>Skilled Trades</div>
+                  <div className="text-xl font-black text-emerald-600 mt-0.5">{skilledTradesTotal}</div>
+                </div>
+
+                <div className={`p-3 rounded-xl border text-center ${pdfTheme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-zinc-900 border-zinc-800'}`}>
+                  <div className={`text-[10px] font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-slate-500' : 'text-zinc-400'}`}>Bathkam Labour</div>
+                  <div className="text-xl font-black text-emerald-600 mt-0.5">{bathkamTotal}</div>
+                </div>
+
+                <div className={`p-3 rounded-xl border text-center ${pdfTheme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-zinc-900 border-zinc-800'}`}>
+                  <div className={`text-[10px] font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-slate-500' : 'text-zinc-400'}`}>Cement Stock</div>
+                  <div className="text-xl font-black text-amber-600 mt-0.5">{totalCementBags} Bags</div>
+                </div>
+              </div>
+
+              {/* Main Trades Table */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className={`text-xs font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-emerald-900' : 'text-emerald-400'}`}>
+                    1. Skilled Trades & Contractor Activities
+                  </h3>
+                  <span className={`text-[10px] ${pdfTheme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>
+                    Sub-Total: {skilledTradesTotal} Skilled Workers
+                  </span>
+                </div>
+
+                <table className={`w-full border-collapse border text-xs ${pdfTheme === 'light' ? 'border-slate-200' : 'border-zinc-800'}`}>
+                  <thead>
+                    <tr className={pdfTheme === 'light' ? 'bg-emerald-800 text-white font-bold' : 'bg-zinc-900 text-zinc-300 font-bold border-b border-zinc-800'}>
+                      <th className="p-2 text-left border-r border-emerald-700/40 w-56">Trade / Agency</th>
+                      <th className="p-2 text-center border-r border-emerald-700/40 w-24">Count</th>
+                      <th className="p-2 text-left">Work Scope & Activity Narration</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { trade: 'Carpenter', count: report.carpenterCount, notes: report.carpenterNotes },
+                      { trade: 'Steel Fitter', count: report.fitterCount, notes: report.fitterNotes },
+                      { trade: 'Electrical', count: report.electricalCount, notes: report.electricalNotes },
+                      { trade: 'Tiles (Suraj Chauhan)', count: report.surajChauhanTilesCount, notes: report.surajChauhanNotes || 'window and door frame and kitchen bottom & top laying & kitchen wall tiles laying' },
+                      { trade: 'Waterproofing (Mohan Khetawat)', count: report.mohanKhetawatWaterproofingCount, notes: report.mohanKhetawatNotes || 'water proofing' },
+                      { trade: 'Waterproofing (Naresh Khetawat)', count: report.nareshKhetawatWaterproofingCount, notes: report.nareshKhetawatNotes || 'water proofing' },
+                      { trade: 'Plumber', count: report.plumberCount, notes: report.plumberNotes },
+                      { trade: 'Core Cutting', count: report.coreCuttingCount, notes: report.coreCuttingNotes },
+                      { trade: 'Fabrication', count: report.fabricationCount, notes: report.fabricationNotes },
+                      ...(report.customTrades || []).map(ct => ({
+                        trade: ct.contractorName ? `${ct.tradeName} (${ct.contractorName})` : ct.tradeName,
+                        count: ct.count,
+                        notes: ct.notes || '-'
+                      }))
+                    ].map((row, idx) => (
+                      <tr
+                        key={idx}
+                        className={
+                          pdfTheme === 'light'
+                            ? idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'
+                            : idx % 2 === 0 ? 'bg-zinc-950' : 'bg-zinc-900/60'
+                        }
+                      >
+                        <td className={`p-2 font-bold border-r ${pdfTheme === 'light' ? 'border-slate-200 text-slate-800' : 'border-zinc-800 text-zinc-200'}`}>
+                          {row.trade}
+                        </td>
+                        <td className={`p-2 text-center font-bold border-r ${pdfTheme === 'light' ? 'border-slate-200 text-emerald-800' : 'border-zinc-800 text-emerald-400'}`}>
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full ${pdfTheme === 'light' ? 'bg-emerald-100 border border-emerald-300' : 'bg-emerald-500/20 border border-emerald-500/30'}`}>
+                            {row.count < 10 ? `0${row.count}` : row.count}
+                          </span>
+                        </td>
+                        <td className={`p-2 italic ${pdfTheme === 'light' ? 'text-slate-600' : 'text-zinc-400'}`}>
+                          {row.notes ? row.notes : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Bathkam & Department Dual Tables */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <h3 className={`text-xs font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-emerald-900' : 'text-emerald-400'}`}>
+                    2. Bathkam Breakdown (Total: {bathkamTotal})
+                  </h3>
+                  <table className={`w-full border-collapse border text-xs ${pdfTheme === 'light' ? 'border-slate-200' : 'border-zinc-800'}`}>
+                    <thead>
+                      <tr className={pdfTheme === 'light' ? 'bg-slate-100 text-slate-800 font-bold border-b border-slate-200' : 'bg-zinc-900 text-zinc-300 font-bold border-b border-zinc-800'}>
+                        <th className="p-2 text-left border-r border-slate-200">Activity</th>
+                        <th className="p-2 text-center w-20">Labour</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        { label: 'Plaster Work', count: report.bathkam?.plasterWork || 0 },
+                        { label: 'Material Shifting', count: report.bathkam?.materialShifting || 0 },
+                        { label: 'Brick Work', count: report.bathkam?.brickWork || 0 },
+                        { label: 'Bai (Female Labour)', count: report.bathkam?.baiLabour || 0 },
+                      ].map((row, idx) => (
+                        <tr key={idx} className={pdfTheme === 'light' ? (idx % 2 === 0 ? 'bg-white' : 'bg-slate-50') : (idx % 2 === 0 ? 'bg-zinc-950' : 'bg-zinc-900/60')}>
+                          <td className={`p-2 border-r ${pdfTheme === 'light' ? 'border-slate-200 text-slate-700' : 'border-zinc-800 text-zinc-300'}`}>{row.label}</td>
+                          <td className={`p-2 text-center font-bold ${pdfTheme === 'light' ? 'text-slate-900' : 'text-white'}`}>{row.count < 10 ? `0${row.count}` : row.count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className={`text-xs font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-emerald-900' : 'text-emerald-400'}`}>
+                    3. Department & Operations
+                  </h3>
+                  <table className={`w-full border-collapse border text-xs ${pdfTheme === 'light' ? 'border-slate-200' : 'border-zinc-800'}`}>
+                    <thead>
+                      <tr className={pdfTheme === 'light' ? 'bg-slate-100 text-slate-800 font-bold border-b border-slate-200' : 'bg-zinc-900 text-zinc-300 font-bold border-b border-zinc-800'}>
+                        <th className="p-2 text-left border-r border-slate-200">Category</th>
+                        <th className="p-2 text-center w-20">Count</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        { label: 'Department Staff', count: report.departmentStaffCount || 0 },
+                        { label: 'Department Labour', count: report.departmentLabourCount || 0 },
+                        { label: 'Breaker Work (Bathkam)', count: report.bathkam?.breakerWork || 0 },
+                      ].map((row, idx) => (
+                        <tr key={idx} className={pdfTheme === 'light' ? (idx % 2 === 0 ? 'bg-white' : 'bg-slate-50') : (idx % 2 === 0 ? 'bg-zinc-950' : 'bg-zinc-900/60')}>
+                          <td className={`p-2 border-r ${pdfTheme === 'light' ? 'border-slate-200 text-slate-700' : 'border-zinc-300 text-zinc-300'}`}>{row.label}</td>
+                          <td className={`p-2 text-center font-bold ${pdfTheme === 'light' ? 'text-slate-900' : 'text-white'}`}>{row.count < 10 ? `0${row.count}` : row.count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Cement Stock Inventory */}
+              <div className="space-y-2">
+                <h3 className={`text-xs font-bold uppercase tracking-wider ${pdfTheme === 'light' ? 'text-emerald-900' : 'text-emerald-400'}`}>
+                  4. Cement Stock Inventory (Total: {totalCementBags} Bags)
+                </h3>
+                <div className="grid grid-cols-4 gap-2 text-xs">
+                  {report.cementStock.map((c, idx) => (
+                    <div
+                      key={idx}
+                      className={`p-2.5 rounded-xl border text-center ${
+                        pdfTheme === 'light'
+                          ? 'bg-slate-50 border-slate-200'
+                          : 'bg-zinc-900 border-zinc-800'
+                      }`}
+                    >
+                      <div className={`text-[10px] font-bold ${pdfTheme === 'light' ? 'text-slate-600' : 'text-zinc-400'}`}>
+                        {c.brandName} {c.type ? `(${c.type})` : ''}
+                      </div>
+                      <div className="text-sm font-black text-amber-600 mt-0.5">{c.bags} Bags</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Official Signatures Footer Block */}
+            <div className={`pt-4 border-t-2 ${pdfTheme === 'light' ? 'border-slate-200 text-slate-600' : 'border-zinc-800 text-zinc-400'} flex justify-between items-end text-xs`}>
+              <div className="space-y-1">
+                <div className="font-bold text-slate-800">ConstructTrack SiteOps Verification</div>
+                <div className="text-[10px] text-slate-400">Generated on {new Date().toLocaleString('en-GB')}</div>
+              </div>
+
+              <div className="flex space-x-12">
+                <div className="text-center space-y-6">
+                  <div className="w-32 border-b border-slate-400" />
+                  <div className="text-[10px] font-bold text-slate-700">Site Engineer Signature</div>
+                </div>
+                <div className="text-center space-y-6">
+                  <div className="w-32 border-b border-slate-400" />
+                  <div className="text-[10px] font-bold text-slate-700">Project Manager Signature</div>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Official Signatures Footer Block */}
-          <div className={`pt-6 border-t-2 ${pdfTheme === 'light' ? 'border-slate-200 text-slate-600' : 'border-zinc-800 text-zinc-400'} flex justify-between items-end text-xs`}>
-            <div className="space-y-1">
-              <div className="font-bold text-slate-800">ConstructTrack SiteOps Verification</div>
-              <div className="text-[10px] text-slate-400">Generated on {new Date().toLocaleString('en-GB')}</div>
+          {/* PAGE 2: BEFORE & AFTER WORK PROGRESS PHOTOS */}
+          <div className="p-8 space-y-6 min-h-[1100px] flex flex-col justify-between border-t-4 border-dashed border-emerald-500">
+            <div className="space-y-6">
+              {/* Page 2 Header Banner */}
+              <div
+                className={`p-5 rounded-2xl flex items-center justify-between ${
+                  pdfTheme === 'light'
+                    ? 'bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 text-white shadow-md'
+                    : 'bg-gradient-to-r from-zinc-900 via-emerald-950 to-zinc-900 text-white border border-emerald-500/30'
+                }`}
+              >
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-widest bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 px-2 py-0.5 rounded-full inline-block mb-1">
+                    PAGE 2 OF 2 — PHOTO DOCUMENTATION
+                  </div>
+                  <h2 className="text-xl font-black">{report.buildingName || 'B-Building Work Progress'}</h2>
+                  <div className="text-xs text-emerald-100 font-medium">Site Work Progress Photos (Before & After Execution)</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-bold text-white">{report.reportDate}</div>
+                  <div className="text-xs text-emerald-200">
+                    Photos: {(report.beforePhotos?.length || 0) + (report.afterPhotos?.length || 0)} Attached
+                  </div>
+                </div>
+              </div>
+
+              {/* BEFORE WORK PHOTOS GRID */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b pb-1">
+                  <h3 className={`text-xs font-bold uppercase tracking-wider flex items-center space-x-2 ${pdfTheme === 'light' ? 'text-amber-800' : 'text-amber-400'}`}>
+                    <span>1. BEFORE WORK EXECUTED PHOTOS ({report.beforePhotos?.length || 0})</span>
+                  </h3>
+                </div>
+
+                {report.beforePhotos && report.beforePhotos.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    {report.beforePhotos.map((photo, pIdx) => (
+                      <div
+                        key={pIdx}
+                        className={`p-3 rounded-xl border space-y-2 ${
+                          pdfTheme === 'light'
+                            ? 'bg-amber-50/50 border-amber-200'
+                            : 'bg-zinc-900 border-zinc-800'
+                        }`}
+                      >
+                        <div className="relative aspect-video rounded-lg overflow-hidden border border-amber-300/40">
+                          <img src={photo.url} alt={photo.caption} className="w-full h-full object-cover" />
+                          <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-amber-600 text-white font-bold text-[9px] uppercase tracking-wider shadow">
+                            BEFORE WORK
+                          </span>
+                        </div>
+                        <div className="text-xs font-semibold text-slate-800">{photo.caption || 'Before execution photo'}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={`p-4 rounded-xl border text-center text-xs italic ${pdfTheme === 'light' ? 'bg-slate-50 border-slate-200 text-slate-500' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}>
+                    No "Before Work" photos attached for this report date.
+                  </div>
+                )}
+              </div>
+
+              {/* AFTER WORK PHOTOS GRID */}
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between border-b pb-1">
+                  <h3 className={`text-xs font-bold uppercase tracking-wider flex items-center space-x-2 ${pdfTheme === 'light' ? 'text-emerald-900' : 'text-emerald-400'}`}>
+                    <span>2. AFTER WORK COMPLETED PHOTOS ({report.afterPhotos?.length || 0})</span>
+                  </h3>
+                </div>
+
+                {report.afterPhotos && report.afterPhotos.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    {report.afterPhotos.map((photo, pIdx) => (
+                      <div
+                        key={pIdx}
+                        className={`p-3 rounded-xl border space-y-2 ${
+                          pdfTheme === 'light'
+                            ? 'bg-emerald-50/50 border-emerald-200'
+                            : 'bg-zinc-900 border-zinc-800'
+                        }`}
+                      >
+                        <div className="relative aspect-video rounded-lg overflow-hidden border border-emerald-400/40">
+                          <img src={photo.url} alt={photo.caption} className="w-full h-full object-cover" />
+                          <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-emerald-600 text-white font-bold text-[9px] uppercase tracking-wider shadow">
+                            AFTER COMPLETED
+                          </span>
+                        </div>
+                        <div className="text-xs font-semibold text-slate-800">{photo.caption || 'After completion photo'}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={`p-4 rounded-xl border text-center text-xs italic ${pdfTheme === 'light' ? 'bg-slate-50 border-slate-200 text-slate-500' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}>
+                    No "After Work" photos attached for this report date.
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div className="flex space-x-12">
-              <div className="text-center space-y-8">
-                <div className="w-36 border-b border-slate-400" />
-                <div className="text-[11px] font-bold text-slate-700">Site Engineer / Supervisor</div>
+            {/* Page 2 Signatures Footer */}
+            <div className={`pt-4 border-t-2 ${pdfTheme === 'light' ? 'border-slate-200 text-slate-600' : 'border-zinc-800 text-zinc-400'} flex justify-between items-end text-xs`}>
+              <div className="space-y-1">
+                <div className="font-bold text-slate-800">ConstructTrack SiteOps Photo Verification</div>
+                <div className="text-[10px] text-slate-400">Page 2 of 2 — Site Visual Progress Audit</div>
               </div>
-              <div className="text-center space-y-8">
-                <div className="w-36 border-b border-slate-400" />
-                <div className="text-[11px] font-bold text-slate-700">Project Manager / Authorised</div>
+
+              <div className="flex space-x-12">
+                <div className="text-center space-y-6">
+                  <div className="w-32 border-b border-slate-400" />
+                  <div className="text-[10px] font-bold text-slate-700">Site Engineer Signature</div>
+                </div>
               </div>
             </div>
           </div>

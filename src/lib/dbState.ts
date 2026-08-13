@@ -65,27 +65,27 @@ export const DEFAULT_SAMPLE_REPORT: DailyProgressReport = {
   reportDate: '13/08/2026',
   buildingName: 'B-Building Work Progress',
   formatStyle: 'PROFESSIONAL',
-  carpenterCount: 2,
+  carpenterCount: 0,
   fitterCount: 0,
-  electricalCount: 2,
-  plumberCount: 2,
+  electricalCount: 0,
+  plumberCount: 0,
   coreCuttingCount: 0,
-  fabricationCount: 2,
-  surajChauhanTilesCount: 6,
+  fabricationCount: 0,
+  surajChauhanTilesCount: 0,
   surajChauhanNotes: 'Window and door frame and kitchen bottom & top laying & kitchen wall tiles laying',
-  mohanKhetawatWaterproofingCount: 2,
+  mohanKhetawatWaterproofingCount: 0,
   mohanKhetawatNotes: 'Water proofing',
-  nareshKhetawatWaterproofingCount: 7,
+  nareshKhetawatWaterproofingCount: 0,
   nareshKhetawatNotes: 'Water proofing',
   bathkam: {
-    plasterWork: 6,
-    materialShifting: 5,
-    brickWork: 5,
-    baiLabour: 13,
-    breakerWork: 1,
+    plasterWork: 0,
+    materialShifting: 0,
+    brickWork: 0,
+    baiLabour: 0,
+    breakerWork: 0,
   },
-  departmentStaffCount: 3,
-  departmentLabourCount: 3,
+  departmentStaffCount: 0,
+  departmentLabourCount: 0,
   departmentTasksNotes: 'Slab, column, brick wall & plaster curing & cleaning waste material',
   cementStock: [
     { brandName: 'Birla Super Cement', type: 'OPC', bags: 80 },
@@ -93,6 +93,8 @@ export const DEFAULT_SAMPLE_REPORT: DailyProgressReport = {
     { brandName: 'Sanla', type: '', bags: 45 },
     { brandName: 'Ambuja Cement', type: 'OPC', bags: 0 },
   ],
+  beforePhotos: [],
+  afterPhotos: [],
   createdByName: 'Site Engineer',
   createdAt: new Date().toISOString()
 };
@@ -290,6 +292,11 @@ export function generateWhatsAppReportText(report: DailyProgressReport): string 
     `• ${ct.tradeName}${ct.contractorName ? ` (${ct.contractorName})` : ''} = *${pad(ct.count || 0)}*${getNoteLine(ct.notes)}`
   ).join('\n\n');
 
+  const totalPhotos = (report.beforePhotos?.length || 0) + (report.afterPhotos?.length || 0);
+  const photoLine = totalPhotos > 0 
+    ? `\n\n📷 *SITE PROGRESS PHOTOS:* ${totalPhotos} Photos Attached (Before: ${report.beforePhotos?.length || 0}, After: ${report.afterPhotos?.length || 0})` 
+    : '';
+
   return `🏗️ *${report.buildingName || 'B-Building Work Progress'}*
 
 📅 *Date:* ${report.reportDate || '13/08/2026'}
@@ -329,7 +336,7 @@ ${customTradeLines ? `\n${customTradeLines}` : ''}
 ━━━━━━━━━━━━━━━━━━━━━
 📦 *STOCK CEMENT*
 
-${cementLines}
+${cementLines}${photoLine}
 
 ━━━━━━━━━━━━━━━━━━━━━
 ✅ *Reported via ConstructTrack SiteOps*`;

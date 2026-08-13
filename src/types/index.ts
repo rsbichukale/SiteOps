@@ -327,6 +327,15 @@ export interface CustomTradeEntry {
   notes?: string;
 }
 
+export interface ReportWorkPhoto {
+  id: string;
+  url: string; // Base64 data URL or uploaded URL
+  caption: string;
+  category: 'BEFORE' | 'AFTER';
+  tradeOrArea?: string;
+  createdAt: string;
+}
+
 export interface DailyProgressReport {
   id: number;
   reportDate: string; // YYYY-MM-DD or DD/MM/YYYY
@@ -370,6 +379,10 @@ export interface DailyProgressReport {
   // Cement Stock
   cementStock: CementStockEntry[];
   
+  // Work Progress Photos (Before & After)
+  beforePhotos?: ReportWorkPhoto[];
+  afterPhotos?: ReportWorkPhoto[];
+
   createdByName?: string;
   createdAt?: string;
 }
