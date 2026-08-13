@@ -336,6 +336,17 @@ export interface ReportWorkPhoto {
   createdAt: string;
 }
 
+export interface WorkProgressPhotoSet {
+  id: string;
+  workTypeOrTrade: string; // e.g. "Tiles (Suraj Chauhan)", "Waterproofing (Mohan Khetawat)", "Painting", "Additional Work: False Ceiling"
+  workAreaLocation?: string; // e.g. "4th Floor Flat 402 Bathroom", "Terrace Slab"
+  beforePhotoUrl?: string;
+  beforeCaption?: string;
+  afterPhotoUrl?: string;
+  afterCaption?: string;
+  createdAt: string;
+}
+
 export interface MaterialDamageEntry {
   id: string;
   contractorOrWorkerName: string;
@@ -403,6 +414,9 @@ export interface DailyProgressReport {
   // Work Progress Photos (Before & After)
   beforePhotos?: ReportWorkPhoto[];
   afterPhotos?: ReportWorkPhoto[];
+
+  // Trade-wise & Additional Work Photo Sets
+  workPhotoSets?: WorkProgressPhotoSet[];
 
   // Material Damage & Bill Deductions
   damageDeductions?: MaterialDamageEntry[];

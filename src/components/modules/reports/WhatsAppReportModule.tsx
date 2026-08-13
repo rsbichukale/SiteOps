@@ -3,9 +3,9 @@
 import React, { useState } from 'react';
 import {
   MessageSquare, Share2, Copy, Check, Calendar, Building, Users, HardHat,
-  Package, Sparkles, Plus, Minus, RotateCcw, Clock, Save, History, FileText, Download, Sun, Moon, Trash2, Camera, Image as ImageIcon, AlertTriangle, DollarSign
+  Package, Sparkles, Plus, Minus, RotateCcw, Clock, Save, History, FileText, Download, Sun, Moon, Trash2, Camera, Image as ImageIcon, AlertTriangle, ArrowRight, Layers
 } from 'lucide-react';
-import { DailyProgressReport, CementStockEntry, CustomTradeEntry, ReportWorkPhoto, MaterialDamageEntry } from '@/types';
+import { DailyProgressReport, CementStockEntry, CustomTradeEntry, ReportWorkPhoto, MaterialDamageEntry, WorkProgressPhotoSet } from '@/types';
 import { getAppState, saveDailyReport, generateWhatsAppReportText, DEFAULT_SAMPLE_REPORT } from '@/lib/dbState';
 import { downloadDPRPdfReport } from '@/lib/pdfReportGenerator';
 
@@ -36,6 +36,7 @@ export const WhatsAppReportModule: React.FC = () => {
     departmentLabourCount: 0,
     beforePhotos: latestSavedReport.beforePhotos || [],
     afterPhotos: latestSavedReport.afterPhotos || [],
+    workPhotoSets: latestSavedReport.workPhotoSets || [],
     damageDeductions: latestSavedReport.damageDeductions || [],
   });
 
@@ -60,6 +61,16 @@ export const WhatsAppReportModule: React.FC = () => {
   const [damageAmount, setDamageAmount] = useState<number>(0);
   const [damageDescription, setDamageDescription] = useState('');
   const [damagePhotos, setDamagePhotos] = useState<string[]>([]);
+
+  // Trade-wise Photo Set Form State
+  const [showAddPhotoSetForm, setShowAddPhotoSetForm] = useState(false);
+  const [selectedPhotoTrade, setSelectedPhotoTrade] = useState('Tiles (Suraj Chauhan)');
+  const [customWorkTypeName, setCustomWorkTypeName] = useState('');
+  const [photoLocation, setPhotoLocation] = useState('');
+  const [beforePhotoUrl, setBeforePhotoUrl] = useState('');
+  const [beforePhotoCaption, setBeforePhotoCaption] = useState('');
+  const [afterPhotoUrl, setAfterPhotoUrl] = useState('');
+  const [afterPhotoCaption, setAfterPhotoCaption] = useState('');
 
   const formattedText = generateWhatsAppReportText(report);
 
@@ -148,6 +159,57 @@ export const WhatsAppReportModule: React.FC = () => {
     }));
   };
 
+  // Trade-wise Photo Set Upload Handlers
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, setter: (url: string) => void) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setter(event.target.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSavePhotoSet = () => {
+    const tradeTitle = selectedPhotoTrade === 'OTHER' ? customWorkTypeName.trim() : selectedPhotoTrade;
+    if (!tradeTitle) return;
+
+    const newPhotoSet: WorkProgressPhotoSet = {
+      id: 'pset_' + Date.now(),
+      workTypeOrTrade: tradeTitle,
+      workAreaLocation: photoLocation.trim() || undefined,
+      beforePhotoUrl: beforePhotoUrl || undefined,
+      beforeCaption: beforePhotoCaption.trim() || undefined,
+      afterPhotoUrl: afterPhotoUrl || undefined,
+      afterCaption: afterPhotoCaption.trim() || undefined,
+      createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setReport(prev => ({
+      ...prev,
+      workPhotoSets: [...(prev.workPhotoSets || []), newPhotoSet]
+    }));
+
+    // Reset Form
+    setSelectedPhotoTrade('Tiles (Suraj Chauhan)');
+    setCustomWorkTypeName('');
+    setPhotoLocation('');
+    setBeforePhotoUrl('');
+    setBeforePhotoCaption('');
+    setAfterPhotoUrl('');
+    setAfterPhotoCaption('');
+    setShowAddPhotoSetForm(false);
+  };
+
+  const handleRemovePhotoSet = (id: string) => {
+    setReport(prev => ({
+      ...prev,
+      workPhotoSets: (prev.workPhotoSets || []).filter(ps => ps.id !== id)
+    }));
+  };
+
   // Damage Photos Upload Handler
   const handleAddDamagePhotoFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -198,60 +260,6 @@ export const WhatsAppReportModule: React.FC = () => {
       ...prev,
       damageDeductions: (prev.damageDeductions || []).filter(d => d.id !== id)
     }));
-  };
-
-  // Image Upload Handlers for Work Photos
-  const handleAddPhotos = (e: React.ChangeEvent<HTMLInputElement>, category: 'BEFORE' | 'AFTER') => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    Array.from(files).forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (uploadEvent) => {
-        const url = uploadEvent.target?.result as string;
-        if (!url) return;
-
-        const newPhoto: ReportWorkPhoto = {
-          id: 'photo_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-          url,
-          caption: file.name.replace(/\.[^/.]+$/, ''),
-          category,
-          createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-
-        setReport(prev => {
-          const key = category === 'BEFORE' ? 'beforePhotos' : 'afterPhotos';
-          const currentList = prev[key] || [];
-          return {
-            ...prev,
-            [key]: [...currentList, newPhoto]
-          };
-        });
-      };
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const handleRemovePhoto = (photoId: string, category: 'BEFORE' | 'AFTER') => {
-    setReport(prev => {
-      const key = category === 'BEFORE' ? 'beforePhotos' : 'afterPhotos';
-      const currentList = prev[key] || [];
-      return {
-        ...prev,
-        [key]: currentList.filter(p => p.id !== photoId)
-      };
-    });
-  };
-
-  const handleUpdatePhotoCaption = (photoId: string, category: 'BEFORE' | 'AFTER', caption: string) => {
-    setReport(prev => {
-      const key = category === 'BEFORE' ? 'beforePhotos' : 'afterPhotos';
-      const currentList = prev[key] || [];
-      return {
-        ...prev,
-        [key]: currentList.map(p => p.id === photoId ? { ...p, caption } : p)
-      };
-    });
   };
 
   const updateNumber = (field: keyof DailyProgressReport, delta: number) => {
@@ -336,6 +344,21 @@ export const WhatsAppReportModule: React.FC = () => {
   const totalCementBags = (report.cementStock || []).reduce((sum, c) => sum + (c.bags || 0), 0);
   const totalDamageDeduction = (report.damageDeductions || []).reduce((sum, d) => sum + (d.damageAmount || 0), 0);
 
+  // Available Trade Options for Photo Sets
+  const tradeOptions = [
+    'Tiles (Suraj Chauhan)',
+    'Waterproofing (Mohan Khetawat)',
+    'Waterproofing (Naresh Khetawat)',
+    'Carpenter',
+    'Steel Fitter',
+    'Electrical',
+    'Plumber',
+    'Core Cutting',
+    'Fabrication',
+    ...(report.customTrades || []).map(ct => ct.contractorName ? `${ct.tradeName} (${ct.contractorName})` : ct.tradeName),
+    'OTHER'
+  ];
+
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-6 pb-24">
       {/* Header Banner */}
@@ -351,11 +374,11 @@ export const WhatsAppReportModule: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">WhatsApp Daily Report</h1>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold uppercase tracking-wider">
-                  Material Damage & Deductions
+                  Trade-wise Work Photos
                 </span>
               </div>
               <p className="text-xs text-zinc-400 mt-0.5">
-                Mark attendance, narrations, before/after photos, damage deductions, and export PDF.
+                Mark attendance, narrations, trade-wise before/after photos, damage deductions, and export PDF.
               </p>
             </div>
           </div>
@@ -858,122 +881,204 @@ export const WhatsAppReportModule: React.FC = () => {
               </div>
             </div>
 
-            {/* SECTION 6: BEFORE & AFTER WORK PROGRESS PHOTOS */}
-            <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-4 space-y-4">
+            {/* UPGRADED SECTION 6: TRADE-WISE & ADDITIONAL WORK PHOTO SETS */}
+            <div className="bg-zinc-900/90 border border-emerald-500/30 rounded-2xl p-4 space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center space-x-2">
-                  <Camera className="w-4 h-4" />
-                  <span>6. Site Work Progress Photos (Before & After)</span>
-                </h3>
-                <span className="text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                  Renders on PDF Page 2
-                </span>
+                <div className="flex items-center space-x-2">
+                  <Camera className="w-4 h-4 text-emerald-400" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                    6. Work-wise Before & After Photo Sets (All Trades & Additional Works)
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setShowAddPhotoSetForm(!showAddPhotoSetForm)}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center space-x-1.5 active:scale-95 transition"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Add Work Photo Set</span>
+                </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* BEFORE WORK PHOTOS UPLOAD */}
-                <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3.5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-amber-400 flex items-center space-x-1.5">
-                      <ImageIcon className="w-4 h-4" />
-                      <span>Before Work Photos ({report.beforePhotos?.length || 0})</span>
-                    </span>
-                    <label className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 text-xs font-bold cursor-pointer transition">
-                      + Add Photos
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={e => handleAddPhotos(e, 'BEFORE')}
-                        className="hidden"
-                      />
-                    </label>
+              {/* Add Trade Photo Set Drawer */}
+              {showAddPhotoSetForm && (
+                <div className="bg-zinc-950 border border-emerald-500/40 rounded-xl p-4 space-y-4">
+                  <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                    <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">📷 New Before & After Work Photo Comparison</span>
+                    <button onClick={() => setShowAddPhotoSetForm(false)} className="text-xs text-zinc-400 hover:text-white">✕</button>
                   </div>
 
-                  {report.beforePhotos && report.beforePhotos.length > 0 ? (
-                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                      {report.beforePhotos.map(photo => (
-                        <div key={photo.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-2 flex items-center space-x-3">
-                          <img src={photo.url} alt="Before" className="w-12 h-12 object-cover rounded-md border border-zinc-700" />
-                          <div className="flex-1 min-w-0">
-                            <input
-                              type="text"
-                              value={photo.caption}
-                              onChange={e => handleUpdatePhotoCaption(photo.id, 'BEFORE', e.target.value)}
-                              className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-[11px] text-zinc-200 focus:border-amber-500 focus:outline-none"
-                              placeholder="Photo caption (e.g. Before waterproofing)..."
-                            />
-                            <span className="text-[9px] text-zinc-500 block mt-0.5">{photo.createdAt}</span>
-                          </div>
-                          <button
-                            onClick={() => handleRemovePhoto(photo.id, 'BEFORE')}
-                            className="text-zinc-500 hover:text-red-400 p-1"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] text-zinc-400 mb-1">Select Trade / Work Type *</label>
+                      <select
+                        value={selectedPhotoTrade}
+                        onChange={e => setSelectedPhotoTrade(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                      >
+                        {tradeOptions.map((opt, i) => (
+                          <option key={i} value={opt}>{opt === 'OTHER' ? '➕ Type Custom Additional Work...' : opt}</option>
+                        ))}
+                      </select>
                     </div>
-                  ) : (
-                    <div className="text-center py-6 border-2 border-dashed border-zinc-800 rounded-lg text-zinc-500 text-xs">
-                      No Before Work Photos Added
-                    </div>
-                  )}
-                </div>
 
-                {/* AFTER WORK PHOTOS UPLOAD */}
-                <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3.5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-emerald-400 flex items-center space-x-1.5">
-                      <ImageIcon className="w-4 h-4" />
-                      <span>After Work Photos ({report.afterPhotos?.length || 0})</span>
-                    </span>
-                    <label className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 text-xs font-bold cursor-pointer transition">
-                      + Add Photos
+                    {selectedPhotoTrade === 'OTHER' && (
+                      <div>
+                        <label className="block text-[10px] text-zinc-400 mb-1">Custom Work Name *</label>
+                        <input
+                          type="text"
+                          value={customWorkTypeName}
+                          onChange={e => setCustomWorkTypeName(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                          placeholder="e.g. Painting, False Ceiling, Granite Fitting..."
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-[10px] text-zinc-400 mb-1">Work Location / Area (Optional)</label>
                       <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={e => handleAddPhotos(e, 'AFTER')}
-                        className="hidden"
+                        type="text"
+                        value={photoLocation}
+                        onChange={e => setPhotoLocation(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                        placeholder="e.g. 4th Floor Flat 402 Bathroom / Terrace Slab"
                       />
-                    </label>
+                    </div>
                   </div>
 
-                  {report.afterPhotos && report.afterPhotos.length > 0 ? (
-                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                      {report.afterPhotos.map(photo => (
-                        <div key={photo.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-2 flex items-center space-x-3">
-                          <img src={photo.url} alt="After" className="w-12 h-12 object-cover rounded-md border border-zinc-700" />
-                          <div className="flex-1 min-w-0">
-                            <input
-                              type="text"
-                              value={photo.caption}
-                              onChange={e => handleUpdatePhotoCaption(photo.id, 'AFTER', e.target.value)}
-                              className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-[11px] text-zinc-200 focus:border-emerald-500 focus:outline-none"
-                              placeholder="Photo caption (e.g. After tile laying)..."
-                            />
-                            <span className="text-[9px] text-zinc-500 block mt-0.5">{photo.createdAt}</span>
-                          </div>
-                          <button
-                            onClick={() => handleRemovePhoto(photo.id, 'AFTER')}
-                            className="text-zinc-500 hover:text-red-400 p-1"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                  {/* Dual Upload Box: BEFORE PHOTO vs AFTER PHOTO */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                    {/* BEFORE PHOTO UPLOAD */}
+                    <div className="bg-zinc-900 border border-amber-500/30 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-amber-400">1. BEFORE WORK PHOTO</span>
+                        <label className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold cursor-pointer hover:bg-amber-500/30">
+                          {beforePhotoUrl ? 'Change' : '+ Upload'}
+                          <input type="file" accept="image/*" onChange={e => handleFileUpload(e, setBeforePhotoUrl)} className="hidden" />
+                        </label>
+                      </div>
+
+                      {beforePhotoUrl ? (
+                        <div className="space-y-2">
+                          <img src={beforePhotoUrl} alt="Before" className="w-full h-32 object-cover rounded-lg border border-amber-500/40" />
+                          <input
+                            type="text"
+                            value={beforePhotoCaption}
+                            onChange={e => setBeforePhotoCaption(e.target.value)}
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-[11px] text-zinc-200 focus:border-amber-500 focus:outline-none"
+                            placeholder="Before caption (e.g. Before waterproofing coat)..."
+                          />
                         </div>
-                      ))}
+                      ) : (
+                        <div className="h-32 border-2 border-dashed border-zinc-800 rounded-lg flex flex-col items-center justify-center text-zinc-500 text-xs">
+                          <span>No Before Photo Selected</span>
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <div className="text-center py-6 border-2 border-dashed border-zinc-800 rounded-lg text-zinc-500 text-xs">
-                      No After Work Photos Added
+
+                    {/* AFTER PHOTO UPLOAD */}
+                    <div className="bg-zinc-900 border border-emerald-500/30 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-emerald-400">2. AFTER WORK PHOTO</span>
+                        <label className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold cursor-pointer hover:bg-emerald-500/30">
+                          {afterPhotoUrl ? 'Change' : '+ Upload'}
+                          <input type="file" accept="image/*" onChange={e => handleFileUpload(e, setAfterPhotoUrl)} className="hidden" />
+                        </label>
+                      </div>
+
+                      {afterPhotoUrl ? (
+                        <div className="space-y-2">
+                          <img src={afterPhotoUrl} alt="After" className="w-full h-32 object-cover rounded-lg border border-emerald-500/40" />
+                          <input
+                            type="text"
+                            value={afterPhotoCaption}
+                            onChange={e => setAfterPhotoCaption(e.target.value)}
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-[11px] text-zinc-200 focus:border-emerald-500 focus:outline-none"
+                            placeholder="After caption (e.g. After 2nd coat tile laying)..."
+                          />
+                        </div>
+                      ) : (
+                        <div className="h-32 border-2 border-dashed border-zinc-800 rounded-lg flex flex-col items-center justify-center text-zinc-500 text-xs">
+                          <span>No After Photo Selected</span>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
+
+                  <div className="flex justify-end space-x-2 pt-2 border-t border-zinc-800">
+                    <button onClick={() => setShowAddPhotoSetForm(false)} className="px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs font-semibold">
+                      Cancel
+                    </button>
+                    <button onClick={handleSavePhotoSet} className="px-4 py-1.5 rounded-lg bg-emerald-500 text-zinc-950 text-xs font-bold shadow">
+                      Save Photo Comparison
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* List of Saved Trade Photo Comparison Sets */}
+              {report.workPhotoSets && report.workPhotoSets.length > 0 ? (
+                <div className="space-y-3">
+                  {report.workPhotoSets.map(pSet => (
+                    <div key={pSet.id} className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                            {pSet.workTypeOrTrade}
+                          </span>
+                          {pSet.workAreaLocation && (
+                            <span className="text-[10px] text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
+                              📍 {pSet.workAreaLocation}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleRemovePhotoSet(pSet.id)}
+                          className="p-1 rounded text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition"
+                          title="Remove Photo Set"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* BEFORE PHOTO DISPLAY */}
+                        <div className="bg-zinc-900 rounded-lg p-2 space-y-1">
+                          <span className="text-[9px] font-bold text-amber-400 uppercase tracking-wider block">BEFORE WORK</span>
+                          {pSet.beforePhotoUrl ? (
+                            <>
+                              <img src={pSet.beforePhotoUrl} alt="Before" className="w-full h-24 object-cover rounded border border-amber-500/30" />
+                              <div className="text-[10px] text-zinc-300 truncate">{pSet.beforeCaption || 'Before execution'}</div>
+                            </>
+                          ) : (
+                            <div className="h-24 bg-zinc-950 rounded flex items-center justify-center text-[10px] text-zinc-600 italic">No Before Photo</div>
+                          )}
+                        </div>
+
+                        {/* AFTER PHOTO DISPLAY */}
+                        <div className="bg-zinc-900 rounded-lg p-2 space-y-1">
+                          <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider block">AFTER COMPLETED</span>
+                          {pSet.afterPhotoUrl ? (
+                            <>
+                              <img src={pSet.afterPhotoUrl} alt="After" className="w-full h-24 object-cover rounded border border-emerald-500/30" />
+                              <div className="text-[10px] text-zinc-300 truncate">{pSet.afterCaption || 'After completion'}</div>
+                            </>
+                          ) : (
+                            <div className="h-24 bg-zinc-950 rounded flex items-center justify-center text-[10px] text-zinc-600 italic">No After Photo</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 border-2 border-dashed border-zinc-800 rounded-xl text-zinc-500 text-xs">
+                  No trade-wise Before & After photo sets added yet. Click <b>"+ Add Work Photo Set"</b> above to attach photos per trade or additional work!
+                </div>
+              )}
             </div>
 
-            {/* NEW SECTION 7: MATERIAL DAMAGE & CONTRACTOR BILL DEDUCTIONS */}
+            {/* SECTION 7: MATERIAL DAMAGE & CONTRACTOR BILL DEDUCTIONS */}
             <div className="bg-zinc-900/90 border border-red-500/30 rounded-2xl p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
@@ -1497,7 +1602,7 @@ export const WhatsAppReportModule: React.FC = () => {
             </div>
           </div>
 
-          {/* PAGE 2: BEFORE & AFTER WORK PROGRESS PHOTOS & DAMAGE EVIDENCE */}
+          {/* PAGE 2: TRADE-WISE BEFORE & AFTER WORK PROGRESS COMPARISON GRID */}
           <div className="p-8 space-y-6 min-h-[1100px] flex flex-col justify-between border-t-4 border-dashed border-emerald-500">
             <div className="space-y-6">
               {/* Page 2 Header Banner */}
@@ -1510,87 +1615,96 @@ export const WhatsAppReportModule: React.FC = () => {
               >
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-widest bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 px-2 py-0.5 rounded-full inline-block mb-1">
-                    PAGE 2 OF 2 — PHOTO DOCUMENTATION
+                    PAGE 2 OF 2 — TRADE-WISE WORK AUDIT
                   </div>
                   <h2 className="text-xl font-black">{report.buildingName || 'B-Building Work Progress'}</h2>
-                  <div className="text-xs text-emerald-100 font-medium">Site Work Progress & Material Damage Photo Audit</div>
+                  <div className="text-xs text-emerald-100 font-medium">Trade-wise & Additional Works Before/After Progress Photos</div>
                 </div>
                 <div className="text-right">
                   <div className="text-sm font-bold text-white">{report.reportDate}</div>
                   <div className="text-xs text-emerald-200">
-                    Photos: {(report.beforePhotos?.length || 0) + (report.afterPhotos?.length || 0)} Attached
+                    Photo Sets: {report.workPhotoSets?.length || 0} Sets Attached
                   </div>
                 </div>
               </div>
 
-              {/* BEFORE WORK PHOTOS GRID */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between border-b pb-1">
-                  <h3 className={`text-xs font-bold uppercase tracking-wider flex items-center space-x-2 ${pdfTheme === 'light' ? 'text-amber-800' : 'text-amber-400'}`}>
-                    <span>1. BEFORE WORK EXECUTED PHOTOS ({report.beforePhotos?.length || 0})</span>
-                  </h3>
-                </div>
-
-                {report.beforePhotos && report.beforePhotos.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-4">
-                    {report.beforePhotos.map((photo, pIdx) => (
-                      <div
-                        key={pIdx}
-                        className={`p-3 rounded-xl border space-y-2 ${
-                          pdfTheme === 'light'
-                            ? 'bg-amber-50/50 border-amber-200'
-                            : 'bg-zinc-900 border-zinc-800'
-                        }`}
-                      >
-                        <div className="relative aspect-video rounded-lg overflow-hidden border border-amber-300/40">
-                          <img src={photo.url} alt={photo.caption} className="w-full h-full object-cover" />
-                          <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-amber-600 text-white font-bold text-[9px] uppercase tracking-wider shadow">
-                            BEFORE WORK
+              {/* TRADE-WISE PHOTO COMPARISON GRID */}
+              <div className="space-y-4">
+                {report.workPhotoSets && report.workPhotoSets.length > 0 ? (
+                  report.workPhotoSets.map((pSet, idx) => (
+                    <div
+                      key={idx}
+                      className={`p-4 rounded-2xl border space-y-3 ${
+                        pdfTheme === 'light'
+                          ? 'bg-slate-50/80 border-slate-200'
+                          : 'bg-zinc-900 border-zinc-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between border-b pb-2">
+                        <div className="flex items-center space-x-2">
+                          <span className={`text-xs font-black uppercase tracking-wider px-3 py-1 rounded-lg ${
+                            pdfTheme === 'light'
+                              ? 'bg-emerald-800 text-white'
+                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          }`}>
+                            {pSet.workTypeOrTrade}
                           </span>
+                          {pSet.workAreaLocation && (
+                            <span className="text-xs text-slate-600 font-semibold">
+                              📍 {pSet.workAreaLocation}
+                            </span>
+                          )}
                         </div>
-                        <div className="text-xs font-semibold text-slate-800">{photo.caption || 'Before execution photo'}</div>
+                        <span className="text-[10px] font-mono text-slate-400">Photo Set #{idx + 1}</span>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className={`p-4 rounded-xl border text-center text-xs italic ${pdfTheme === 'light' ? 'bg-slate-50 border-slate-200 text-slate-500' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}>
-                    No "Before Work" photos attached for this report date.
-                  </div>
-                )}
-              </div>
 
-              {/* AFTER WORK PHOTOS GRID */}
-              <div className="space-y-3 pt-2">
-                <div className="flex items-center justify-between border-b pb-1">
-                  <h3 className={`text-xs font-bold uppercase tracking-wider flex items-center space-x-2 ${pdfTheme === 'light' ? 'text-emerald-900' : 'text-emerald-400'}`}>
-                    <span>2. AFTER WORK COMPLETED PHOTOS ({report.afterPhotos?.length || 0})</span>
-                  </h3>
-                </div>
-
-                {report.afterPhotos && report.afterPhotos.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-4">
-                    {report.afterPhotos.map((photo, pIdx) => (
-                      <div
-                        key={pIdx}
-                        className={`p-3 rounded-xl border space-y-2 ${
-                          pdfTheme === 'light'
-                            ? 'bg-emerald-50/50 border-emerald-200'
-                            : 'bg-zinc-900 border-zinc-800'
-                        }`}
-                      >
-                        <div className="relative aspect-video rounded-lg overflow-hidden border border-emerald-400/40">
-                          <img src={photo.url} alt={photo.caption} className="w-full h-full object-cover" />
-                          <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-emerald-600 text-white font-bold text-[9px] uppercase tracking-wider shadow">
-                            AFTER COMPLETED
-                          </span>
+                      {/* Side-by-Side Before vs After Comparison Cards */}
+                      <div className="grid grid-cols-2 gap-4">
+                        {/* BEFORE PHOTO CARD */}
+                        <div className={`p-3 rounded-xl border space-y-2 ${pdfTheme === 'light' ? 'bg-amber-50/60 border-amber-200' : 'bg-zinc-950 border-zinc-800'}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">BEFORE WORK</span>
+                            <span className="text-[9px] text-amber-600 font-mono">STATUS: INITIAL</span>
+                          </div>
+                          {pSet.beforePhotoUrl ? (
+                            <div className="space-y-1.5">
+                              <div className="relative aspect-video rounded-lg overflow-hidden border border-amber-300">
+                                <img src={pSet.beforePhotoUrl} alt="Before" className="w-full h-full object-cover" />
+                              </div>
+                              <div className="text-xs text-slate-800 font-medium">{pSet.beforeCaption || 'Before work photo'}</div>
+                            </div>
+                          ) : (
+                            <div className="h-32 rounded-lg border-2 border-dashed border-amber-200 flex items-center justify-center text-xs italic text-amber-700/60">
+                              No Before Photo
+                            </div>
+                          )}
                         </div>
-                        <div className="text-xs font-semibold text-slate-800">{photo.caption || 'After completion photo'}</div>
+
+                        {/* AFTER PHOTO CARD */}
+                        <div className={`p-3 rounded-xl border space-y-2 ${pdfTheme === 'light' ? 'bg-emerald-50/60 border-emerald-200' : 'bg-zinc-950 border-zinc-800'}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">AFTER COMPLETED</span>
+                            <span className="text-[9px] text-emerald-600 font-mono">STATUS: EXECUTED</span>
+                          </div>
+                          {pSet.afterPhotoUrl ? (
+                            <div className="space-y-1.5">
+                              <div className="relative aspect-video rounded-lg overflow-hidden border border-emerald-300">
+                                <img src={pSet.afterPhotoUrl} alt="After" className="w-full h-full object-cover" />
+                              </div>
+                              <div className="text-xs text-slate-800 font-medium">{pSet.afterCaption || 'After completion photo'}</div>
+                            </div>
+                          ) : (
+                            <div className="h-32 rounded-lg border-2 border-dashed border-emerald-200 flex items-center justify-center text-xs italic text-emerald-700/60">
+                              No After Photo
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))
                 ) : (
-                  <div className={`p-4 rounded-xl border text-center text-xs italic ${pdfTheme === 'light' ? 'bg-slate-50 border-slate-200 text-slate-500' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}>
-                    No "After Work" photos attached for this report date.
+                  <div className={`p-6 rounded-2xl border text-center text-xs italic ${pdfTheme === 'light' ? 'bg-slate-50 border-slate-200 text-slate-500' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}>
+                    No trade-wise Before & After photo sets attached for this report date.
                   </div>
                 )}
               </div>
