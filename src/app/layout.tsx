@@ -1,0 +1,44 @@
+import type { Metadata, Viewport } from 'next';
+import { Inter } from 'next/font/google';
+import './globals.css';
+
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+});
+
+export const metadata: Metadata = {
+  title: 'ConstructTrack SiteOps — Site Operations Companion',
+  description: 'Mobile-First PWA for site logistics, material GRN, stock ledger, petty cash, rented machinery, safety compliance, and quality testing.',
+  manifest: '/manifest.json',
+  icons: [
+    { rel: 'apple-touch-icon', url: '/icons/icon-192.png' },
+  ],
+};
+
+export const viewport: Viewport = {
+  themeColor: '#10b981',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en" className={`dark ${inter.variable}`}>
+      <head>
+        <meta httpEquiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+        <meta httpEquiv="Pragma" content="no-cache" />
+        <meta httpEquiv="Expires" content="0" />
+      </head>
+      <body className="bg-zinc-950 text-zinc-100 min-h-screen font-sans">
+        {children}
+      </body>
+    </html>
+  );
+}
