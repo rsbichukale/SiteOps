@@ -19,12 +19,22 @@
 
 1. Rotate the exposed Supabase service-role key and database password in the Supabase dashboard. Revoking the old values is mandatory because Git history cannot make a leaked credential secret again.
 2. Put only `NEXT_PUBLIC_SUPABASE_URL` and the browser-safe publishable/anon key in the local `.env` file.
-3. Run `siteops_supabase_schema.sql` in a controlled database migration window and review its output.
-4. Create or sign in to the first Auth account.
-5. For existing projects, insert that user's UUID into `site_members` as `admin`. New projects add their creator automatically.
-6. If the existing database contains multiple projects, assign every legacy operational row to the correct `site_id`. The script auto-assigns legacy rows only when exactly one project exists because guessing across multiple projects would corrupt tenant ownership.
-7. Verify anonymous requests are denied, members see only assigned projects, supervisors cannot delete, and cross-module RPC calls create both records or neither.
-8. Rotate any deployment/provider secrets that copied the old credentials and review Supabase access logs.
+3. Create or sign in to the first Auth account.
+4. For existing projects, insert that user's UUID into `site_members` as `admin`. New projects add their creator automatically.
+5. With a real admin and supervisor account, verify member-only project visibility, cross-project isolation, supervisor delete denial, and transactional RPC rollback against the live Data API.
+6. Rotate any deployment/provider secrets that copied the old credentials and review Supabase access logs.
+
+## Live Supabase rollout completed
+
+- Applied persistence-field alignment, project membership, project-scoped RLS, authenticated grants, and anonymous-access revocation to the `SiteOps` Supabase project.
+- Installed all three atomic cross-module save functions.
+- Removed all 28 legacy public read/write policies; 108 scoped operational policies are active.
+- Confirmed `anon` has no read access to `sites` and no insert access to `material_inward`.
+- Revoked direct API execution of the pre-existing `public.rls_auto_enable()` security-definer event-trigger function.
+- Added all missing foreign-key indexes reported by the Supabase performance advisor.
+- Assigned all 39 approved legacy master/sample rows to `Site Alpha (Main Project)` and enforced `site_id NOT NULL` on every scoped table.
+- Supabase security advisor now reports zero warnings or errors. Remaining performance notices are only new/unused-index observations.
+- Removed `.env` from Git tracking; the local file remains ignored.
 
 ## Next engineering iterations
 

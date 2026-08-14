@@ -520,7 +520,7 @@ GRANT USAGE ON SCHEMA private TO authenticated;
 ALTER TABLE sites ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES auth.users(id) DEFAULT auth.uid();
 
 CREATE TABLE IF NOT EXISTS site_members (
-    site_id INT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+    site_id BIGINT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     role TEXT NOT NULL DEFAULT 'supervisor' CHECK (role IN ('admin', 'engineer', 'supervisor')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -528,7 +528,7 @@ CREATE TABLE IF NOT EXISTS site_members (
 );
 CREATE INDEX IF NOT EXISTS site_members_user_id_idx ON site_members(user_id);
 
-CREATE OR REPLACE FUNCTION private.is_site_member(p_site_id INT, p_roles TEXT[] DEFAULT NULL)
+CREATE OR REPLACE FUNCTION private.is_site_member(p_site_id BIGINT, p_roles TEXT[] DEFAULT NULL)
 RETURNS BOOLEAN
 LANGUAGE SQL
 STABLE
@@ -543,8 +543,8 @@ AS $$
       AND (p_roles IS NULL OR membership.role = ANY(p_roles))
   );
 $$;
-REVOKE ALL ON FUNCTION private.is_site_member(INT, TEXT[]) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION private.is_site_member(INT, TEXT[]) TO authenticated;
+REVOKE ALL ON FUNCTION private.is_site_member(BIGINT, TEXT[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.is_site_member(BIGINT, TEXT[]) TO authenticated;
 
 CREATE OR REPLACE FUNCTION private.add_site_owner()
 RETURNS TRIGGER
@@ -572,6 +572,7 @@ FOR EACH ROW EXECUTE FUNCTION private.add_site_owner();
 DO $$
 DECLARE
   table_name TEXT;
+  null_site_count BIGINT;
   operational_tables CONSTANT TEXT[] := ARRAY[
     'contractors_master', 'material_categories', 'suppliers', 'material_inward',
     'material_issued', 'material_wastage', 'expense_categories', 'expenses',
@@ -581,15 +582,24 @@ DECLARE
     'cube_tests', 'material_tests', 'ncr_reports', 'daily_progress_reports',
     'contractor_shifts', 'contractor_material_allocations', 'material_damage_deductions'
   ];
-  only_site_id INT;
+  only_site_id BIGINT;
 BEGIN
   SELECT CASE WHEN COUNT(*) = 1 THEN MIN(id) END INTO only_site_id FROM sites;
 
   FOREACH table_name IN ARRAY operational_tables LOOP
-    EXECUTE format('ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS site_id INT REFERENCES public.sites(id) ON DELETE CASCADE', table_name);
+    EXECUTE format('ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS site_id BIGINT REFERENCES public.sites(id) ON DELETE CASCADE', table_name);
     EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON public.%I(site_id)', table_name || '_site_id_idx', table_name);
     IF only_site_id IS NOT NULL THEN
       EXECUTE format('UPDATE public.%I SET site_id = $1 WHERE site_id IS NULL', table_name) USING only_site_id;
+    END IF;
+
+    EXECUTE format('SELECT COUNT(*) FROM public.%I WHERE site_id IS NULL', table_name)
+      INTO null_site_count;
+    IF null_site_count = 0 THEN
+      EXECUTE format('ALTER TABLE public.%I ALTER COLUMN site_id SET NOT NULL', table_name);
+    ELSE
+      RAISE NOTICE 'Table public.% still has % rows without site_id; map them before enforcing NOT NULL.',
+        table_name, null_site_count;
     END IF;
   END LOOP;
 END $$;
@@ -618,41 +628,41 @@ BEGIN
   END LOOP;
 
   CREATE POLICY sites_select_member ON sites FOR SELECT TO authenticated
-    USING (private.is_site_member(id, NULL) OR created_by = (SELECT auth.uid()));
+    USING (private.is_site_member(id::BIGINT, NULL::TEXT[]) OR created_by = (SELECT auth.uid()));
   CREATE POLICY sites_insert_owner ON sites FOR INSERT TO authenticated
     WITH CHECK (created_by = (SELECT auth.uid()));
   CREATE POLICY sites_update_manager ON sites FOR UPDATE TO authenticated
-    USING (private.is_site_member(id, ARRAY['admin','engineer']))
-    WITH CHECK (private.is_site_member(id, ARRAY['admin','engineer']));
+    USING (private.is_site_member(id::BIGINT, ARRAY['admin','engineer']::TEXT[]))
+    WITH CHECK (private.is_site_member(id::BIGINT, ARRAY['admin','engineer']::TEXT[]));
   CREATE POLICY sites_delete_admin ON sites FOR DELETE TO authenticated
-    USING (private.is_site_member(id, ARRAY['admin']));
+    USING (private.is_site_member(id::BIGINT, ARRAY['admin']::TEXT[]));
 
   CREATE POLICY site_members_select ON site_members FOR SELECT TO authenticated
-    USING (user_id = (SELECT auth.uid()) OR private.is_site_member(site_id, ARRAY['admin']));
+    USING (user_id = (SELECT auth.uid()) OR private.is_site_member(site_id::BIGINT, ARRAY['admin']::TEXT[]));
   CREATE POLICY site_members_insert_admin ON site_members FOR INSERT TO authenticated
-    WITH CHECK (private.is_site_member(site_id, ARRAY['admin']));
+    WITH CHECK (private.is_site_member(site_id::BIGINT, ARRAY['admin']::TEXT[]));
   CREATE POLICY site_members_update_admin ON site_members FOR UPDATE TO authenticated
-    USING (private.is_site_member(site_id, ARRAY['admin']))
-    WITH CHECK (private.is_site_member(site_id, ARRAY['admin']));
+    USING (private.is_site_member(site_id::BIGINT, ARRAY['admin']::TEXT[]))
+    WITH CHECK (private.is_site_member(site_id::BIGINT, ARRAY['admin']::TEXT[]));
   CREATE POLICY site_members_delete_admin ON site_members FOR DELETE TO authenticated
-    USING (private.is_site_member(site_id, ARRAY['admin']));
+    USING (private.is_site_member(site_id::BIGINT, ARRAY['admin']::TEXT[]));
 
   FOREACH table_name IN ARRAY operational_tables LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', table_name);
     EXECUTE format(
-      'CREATE POLICY project_select ON public.%I FOR SELECT TO authenticated USING (private.is_site_member(site_id, NULL))',
+      'CREATE POLICY project_select ON public.%I FOR SELECT TO authenticated USING (private.is_site_member(site_id::BIGINT, NULL::TEXT[]))',
       table_name
     );
     EXECUTE format(
-      'CREATE POLICY project_insert ON public.%I FOR INSERT TO authenticated WITH CHECK (private.is_site_member(site_id, ARRAY[''admin'',''engineer'',''supervisor'']))',
+      'CREATE POLICY project_insert ON public.%I FOR INSERT TO authenticated WITH CHECK (private.is_site_member(site_id::BIGINT, ARRAY[''admin'',''engineer'',''supervisor'']::TEXT[]))',
       table_name
     );
     EXECUTE format(
-      'CREATE POLICY project_update ON public.%I FOR UPDATE TO authenticated USING (private.is_site_member(site_id, ARRAY[''admin'',''engineer'',''supervisor''])) WITH CHECK (private.is_site_member(site_id, ARRAY[''admin'',''engineer'',''supervisor'']))',
+      'CREATE POLICY project_update ON public.%I FOR UPDATE TO authenticated USING (private.is_site_member(site_id::BIGINT, ARRAY[''admin'',''engineer'',''supervisor'']::TEXT[])) WITH CHECK (private.is_site_member(site_id::BIGINT, ARRAY[''admin'',''engineer'',''supervisor'']::TEXT[]))',
       table_name
     );
     EXECUTE format(
-      'CREATE POLICY project_delete ON public.%I FOR DELETE TO authenticated USING (private.is_site_member(site_id, ARRAY[''admin'',''engineer'']))',
+      'CREATE POLICY project_delete ON public.%I FOR DELETE TO authenticated USING (private.is_site_member(site_id::BIGINT, ARRAY[''admin'',''engineer'']::TEXT[]))',
       table_name
     );
   END LOOP;
@@ -699,7 +709,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS allocation_source_material_issue_unique
   ON contractor_material_allocations(site_id, source_material_issue_id) WHERE source_material_issue_id IS NOT NULL;
 
 CREATE OR REPLACE FUNCTION public.save_machinery_payment_with_expense(
-  p_site_id INT, p_payment JSONB, p_expense JSONB
+  p_site_id BIGINT, p_payment JSONB, p_expense JSONB
 ) RETURNS VOID
 LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public
 AS $$
@@ -715,7 +725,7 @@ END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.save_material_inward_with_ncr(
-  p_site_id INT, p_inward JSONB, p_ncr JSONB
+  p_site_id BIGINT, p_inward JSONB, p_ncr JSONB
 ) RETURNS VOID
 LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public
 AS $$
@@ -731,7 +741,7 @@ END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.save_material_issue_with_allocation(
-  p_site_id INT, p_issue JSONB, p_allocation JSONB
+  p_site_id BIGINT, p_issue JSONB, p_allocation JSONB
 ) RETURNS VOID
 LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public
 AS $$
@@ -746,12 +756,12 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.save_machinery_payment_with_expense(INT, JSONB, JSONB) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.save_material_inward_with_ncr(INT, JSONB, JSONB) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.save_material_issue_with_allocation(INT, JSONB, JSONB) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.save_machinery_payment_with_expense(INT, JSONB, JSONB) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.save_material_inward_with_ncr(INT, JSONB, JSONB) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.save_material_issue_with_allocation(INT, JSONB, JSONB) TO authenticated;
+REVOKE ALL ON FUNCTION public.save_machinery_payment_with_expense(BIGINT, JSONB, JSONB) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.save_material_inward_with_ncr(BIGINT, JSONB, JSONB) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.save_material_issue_with_allocation(BIGINT, JSONB, JSONB) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.save_machinery_payment_with_expense(BIGINT, JSONB, JSONB) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.save_material_inward_with_ncr(BIGINT, JSONB, JSONB) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.save_material_issue_with_allocation(BIGINT, JSONB, JSONB) TO authenticated;
 
 -- Keep SERIAL/BIGSERIAL sequences ahead of rows inserted by seed scripts with
 -- explicit IDs. Without this, the next normal insert can collide with id = 1.
