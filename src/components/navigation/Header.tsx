@@ -6,7 +6,7 @@ import { Site, AppUser, ModuleTab } from '@/types';
 
 interface HeaderProps {
   sites: Site[];
-  activeSiteId: number;
+  activeSiteId: number | null;
   onSelectSite: (siteId: number) => void;
   onToggleSidebar: () => void;
   currentUser: AppUser | null;
@@ -86,10 +86,11 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Site Selector */}
           <div className="relative">
             <select
-              value={activeSiteId}
+              value={activeSiteId ?? ''}
               onChange={(e) => onSelectSite(Number(e.target.value))}
               className="bg-zinc-800 text-zinc-200 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:border-emerald-500 cursor-pointer pr-7 appearance-none"
             >
+              {sites.length === 0 && <option value="">No projects configured</option>}
               {sites.map((site) => (
                 <option key={site.id} value={site.id}>
                   {site.name}
@@ -113,4 +114,3 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
-

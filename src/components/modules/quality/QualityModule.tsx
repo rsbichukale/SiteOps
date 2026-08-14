@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Microscope, Plus, CheckCircle2, XCircle, AlertTriangle, FileText, Calendar } from 'lucide-react';
 import { CubeTest, MaterialTest, NCRReport } from '@/types';
 import { getAppState, saveAppState } from '@/lib/dbState';
+import { createLocalId } from '@/lib/ids';
 
 import { useSiteOpsState } from '@/hooks/useSiteOpsState';
 
@@ -11,6 +12,7 @@ export const QualityModule: React.FC = () => {
   const { state, updateState } = useSiteOpsState();
   const [activeSubTab, setActiveSubTab] = useState<'cube' | 'material' | 'ncr'>('cube');
   const [isCubeModalOpen, setIsCubeModalOpen] = useState(false);
+  const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
   const [isNcrModalOpen, setIsNcrModalOpen] = useState(false);
 
   // Cube Test Form State
@@ -32,13 +34,16 @@ export const QualityModule: React.FC = () => {
     isCodeReference: '',
     assignedTo: '',
   });
+  const [materialForm, setMaterialForm] = useState<{
+    material: string; testType: string; sampleSource: string; testResult: string; passFail: 'PASS' | 'FAIL';
+  }>({ material: '', testType: '', sampleSource: '', testResult: '', passFail: 'PASS' });
 
-  const handleAddCubeTest = (e: React.FormEvent) => {
+  const handleAddCubeTest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!cubeForm.location.trim()) return;
 
     const newTest: CubeTest = {
-      id: Date.now(),
+      id: createLocalId(),
       castingDate: cubeForm.castingDate,
       grade: cubeForm.grade,
       location: cubeForm.location.trim(),
@@ -49,9 +54,10 @@ export const QualityModule: React.FC = () => {
       labName: cubeForm.labName,
     };
 
-    saveAppState({
+    const result = await saveAppState({
       cubeTests: [newTest, ...state.cubeTests],
     });
+    if (!result.success) return;
 
     setIsCubeModalOpen(false);
     setCubeForm({
@@ -66,12 +72,12 @@ export const QualityModule: React.FC = () => {
     });
   };
 
-  const handleAddNcr = (e: React.FormEvent) => {
+  const handleAddNcr = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!ncrForm.description.trim()) return;
 
     const newNcr: NCRReport = {
-      id: Date.now(),
+      id: createLocalId(),
       location: ncrForm.location,
       description: ncrForm.description.trim(),
       isCodeReference: ncrForm.isCodeReference,
@@ -80,25 +86,52 @@ export const QualityModule: React.FC = () => {
       createdAt: new Date().toISOString(),
     };
 
-    saveAppState({
+    const result = await saveAppState({
       ncrReports: [newNcr, ...state.ncrReports],
     });
+    if (!result.success) return;
 
     setIsNcrModalOpen(false);
     setNcrForm({ location: '', description: '', isCodeReference: '', assignedTo: '' });
   };
 
-  const handleApproveNcr = (id: number) => {
+  const handleAddMaterialTest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!materialForm.material.trim() || !materialForm.testType.trim()) return;
+    const materialTest: MaterialTest = {
+      id: createLocalId(),
+      material: materialForm.material.trim(),
+      testType: materialForm.testType.trim(),
+      sampleSource: materialForm.sampleSource.trim(),
+      testResult: materialForm.testResult.trim(),
+      passFail: materialForm.passFail,
+      dateTested: new Date().toISOString().slice(0, 10),
+    };
+    const result = await saveAppState({ materialTests: [materialTest, ...state.materialTests] });
+    if (!result.success) return;
+    setIsMaterialModalOpen(false);
+    setMaterialForm({ material: '', testType: '', sampleSource: '', testResult: '', passFail: 'PASS' });
+  };
+
+  const handleApproveNcr = async (id: number) => {
     const updated = state.ncrReports.map(ncr => {
       if (ncr.id === id) {
         return {
           ...ncr,
-          description: ncr.description.replace('[DRAFT NCR - QC Failed]', '[CONFIRMED NCR - Action Required]'),
+          status: 'IN_RECTIFICATION' as const,
         };
       }
       return ncr;
     });
-    saveAppState({ ncrReports: updated });
+    await saveAppState({ ncrReports: updated });
+  };
+
+  const handleCloseNcr = async (id: number) => {
+    await saveAppState({
+      ncrReports: state.ncrReports.map(ncr => ncr.id === id
+        ? { ...ncr, status: 'CLOSED' as const, closedAt: new Date().toISOString() }
+        : ncr),
+    });
   };
 
   return (
@@ -116,6 +149,12 @@ export const QualityModule: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setIsMaterialModalOpen(true)}
+            className="px-3 py-2 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 font-semibold text-xs flex items-center space-x-1.5 border border-sky-500/30"
+          >
+            <Plus className="w-4 h-4" /><span>Material Test</span>
+          </button>
           <button
             onClick={() => setIsCubeModalOpen(true)}
             className="flex-1 sm:flex-initial px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-bold text-xs flex items-center justify-center space-x-1.5 transition shadow-lg shadow-emerald-500/20"
@@ -135,6 +174,12 @@ export const QualityModule: React.FC = () => {
 
       {/* Sub Tab Switcher */}
       <div className="flex items-center space-x-1 bg-zinc-900 p-1 rounded-xl border border-zinc-800 text-xs">
+        <button
+          onClick={() => setActiveSubTab('material')}
+          className={`px-3 py-2 rounded-lg font-medium transition ${activeSubTab === 'material' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold' : 'text-zinc-400 hover:text-zinc-200'}`}
+        >
+          Material Tests ({state.materialTests.length})
+        </button>
         <button
           onClick={() => setActiveSubTab('cube')}
           className={`px-3 py-2 rounded-lg font-medium transition ${
@@ -200,6 +245,21 @@ export const QualityModule: React.FC = () => {
         </div>
       )}
 
+      {activeSubTab === 'material' && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {state.materialTests.length === 0 ? (
+            <div className="col-span-full rounded-xl border border-zinc-800 bg-zinc-900 p-8 text-center text-sm text-zinc-500">No material tests recorded.</div>
+          ) : state.materialTests.map(test => (
+            <div key={test.id} className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+              <div className="flex items-center justify-between"><strong>{test.material}</strong><span className={test.passFail === 'PASS' ? 'text-emerald-400' : 'text-red-400'}>{test.passFail}</span></div>
+              <div className="mt-1 text-xs text-zinc-400">{test.testType} · {test.dateTested}</div>
+              <div className="mt-2 text-sm text-zinc-200">{test.testResult || 'Result not entered'}</div>
+              {test.sampleSource && <div className="mt-1 text-xs text-zinc-500">Source: {test.sampleSource}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* SUB-TAB 2: NCR REPORTS */}
       {activeSubTab === 'ncr' && (
         <div className="space-y-3">
@@ -211,7 +271,7 @@ export const QualityModule: React.FC = () => {
           ) : (
             <div className="space-y-2">
               {state.ncrReports.map((ncr) => {
-                const isDraft = ncr.description.includes('[DRAFT NCR');
+                const isDraft = Boolean(ncr.sourceMaterialInwardId) && ncr.status === 'OPEN';
                 return (
                   <div key={ncr.id} className={`p-4 rounded-xl border flex items-center justify-between transition ${
                     isDraft ? 'bg-amber-950/20 border-amber-500/40' : 'bg-zinc-900 border-zinc-800'
@@ -243,6 +303,12 @@ export const QualityModule: React.FC = () => {
                           </button>
                         </div>
                       )}
+                      {ncr.status === 'OPEN' && !isDraft && (
+                        <button onClick={() => handleApproveNcr(ncr.id)} className="rounded-lg bg-amber-500 px-3 py-1 text-xs font-bold text-zinc-950">Start rectification</button>
+                      )}
+                      {ncr.status === 'IN_RECTIFICATION' && (
+                        <button onClick={() => handleCloseNcr(ncr.id)} className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-bold text-zinc-950">Close NCR</button>
+                      )}
                     </div>
                   </div>
                 );
@@ -253,6 +319,22 @@ export const QualityModule: React.FC = () => {
       )}
 
       {/* MODAL: ADD CUBE TEST */}
+      {isMaterialModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+            <h3 className="font-bold">Record Material Test</h3>
+            <form onSubmit={handleAddMaterialTest} className="space-y-3 text-xs">
+              <input required placeholder="Material" value={materialForm.material} onChange={e => setMaterialForm({ ...materialForm, material: e.target.value })} className="w-full rounded-xl border border-zinc-700 bg-zinc-800 p-2.5" />
+              <input required placeholder="Test type" value={materialForm.testType} onChange={e => setMaterialForm({ ...materialForm, testType: e.target.value })} className="w-full rounded-xl border border-zinc-700 bg-zinc-800 p-2.5" />
+              <input placeholder="Sample source" value={materialForm.sampleSource} onChange={e => setMaterialForm({ ...materialForm, sampleSource: e.target.value })} className="w-full rounded-xl border border-zinc-700 bg-zinc-800 p-2.5" />
+              <input placeholder="Test result" value={materialForm.testResult} onChange={e => setMaterialForm({ ...materialForm, testResult: e.target.value })} className="w-full rounded-xl border border-zinc-700 bg-zinc-800 p-2.5" />
+              <select value={materialForm.passFail} onChange={e => setMaterialForm({ ...materialForm, passFail: e.target.value as 'PASS' | 'FAIL' })} className="w-full rounded-xl border border-zinc-700 bg-zinc-800 p-2.5"><option>PASS</option><option>FAIL</option></select>
+              <div className="flex justify-end gap-2"><button type="button" onClick={() => setIsMaterialModalOpen(false)} className="rounded-lg bg-zinc-800 px-3 py-2">Cancel</button><button className="rounded-lg bg-emerald-600 px-3 py-2 font-bold text-zinc-950">Save test</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {isCubeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 text-zinc-100 space-y-4">

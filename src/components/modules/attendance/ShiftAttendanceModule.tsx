@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { ContractorShiftRecord, ContractorMaster } from '@/types';
 import { saveAppState } from '@/lib/dbState';
+import { createLocalId } from '@/lib/ids';
 import { Modal } from '@/components/ui/Modal';
 import { StatCard } from '@/components/ui/StatCard';
 import { Badge } from '@/components/ui/Badge';
@@ -16,11 +17,11 @@ import { useSiteOpsState } from '@/hooks/useSiteOpsState';
 
 export const ShiftAttendanceModule: React.FC = () => {
   const { state } = useSiteOpsState();
-  const contractors = state.contractorsMaster || [];
-  const shifts = state.contractorShifts || [];
+  const contractors = state.contractorsMaster;
+  const shifts = state.contractorShifts;
 
   const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toLocaleDateString('en-GB')
+    new Date().toISOString().slice(0, 10)
   );
 
   // Modals state
@@ -40,6 +41,12 @@ export const ShiftAttendanceModule: React.FC = () => {
   const [overtimeHours, setOvertimeHours] = useState<number>(0);
   const [punchOutNotes, setPunchOutNotes] = useState<string>('');
 
+  useEffect(() => {
+    if (contractors.length > 0 && !contractors.some(contractor => contractor.id === selectedContractorId)) {
+      setSelectedContractorId(contractors[0].id);
+    }
+  }, [contractors, selectedContractorId]);
+
   const openPunchInModal = () => {
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -47,7 +54,7 @@ export const ShiftAttendanceModule: React.FC = () => {
     setIsPunchInOpen(true);
   };
 
-  const handlePunchInSubmit = (e: React.FormEvent) => {
+  const handlePunchInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const contractor = contractors.find(c => c.id === Number(selectedContractorId));
     if (!contractor) return;
@@ -56,7 +63,7 @@ export const ShiftAttendanceModule: React.FC = () => {
     const currentTimeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     const newShift: ContractorShiftRecord = {
-      id: Date.now(),
+      id: createLocalId(),
       contractorId: contractor.id,
       contractorName: contractor.name,
       trade: contractor.trade,
@@ -70,9 +77,10 @@ export const ShiftAttendanceModule: React.FC = () => {
       createdAt: new Date().toISOString(),
     };
 
-    saveAppState({
+    const result = await saveAppState({
       contractorShifts: [newShift, ...shifts],
     });
+    if (!result.success) return;
 
     setIsPunchInOpen(false);
   };
@@ -86,7 +94,7 @@ export const ShiftAttendanceModule: React.FC = () => {
     setIsPunchOutOpen(true);
   };
 
-  const handlePunchOutSubmit = (e: React.FormEvent) => {
+  const handlePunchOutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeShiftToPunchOut) return;
 
@@ -98,21 +106,24 @@ export const ShiftAttendanceModule: React.FC = () => {
           overtimeHours: Number(overtimeHours) || 0,
           workDescription: punchOutNotes || s.workDescription,
           status: 'COMPLETED' as const,
+          completedAt: new Date().toISOString(),
         };
       }
       return s;
     });
 
-    saveAppState({
+    const result = await saveAppState({
       contractorShifts: updatedShifts,
     });
+    if (!result.success) return;
 
     setIsPunchOutOpen(false);
     setActiveShiftToPunchOut(null);
   };
 
-  const activeShifts = shifts.filter(s => s.status === 'IN_PROGRESS');
-  const completedShifts = shifts.filter(s => s.status === 'COMPLETED');
+  const dateShifts = shifts.filter(s => s.reportDate === selectedDate);
+  const activeShifts = dateShifts.filter(s => s.status === 'IN_PROGRESS');
+  const completedShifts = dateShifts.filter(s => s.status === 'COMPLETED');
   const totalPunchedInManpower = activeShifts.reduce((sum, s) => sum + s.workerCount, 0);
 
   return (
@@ -132,6 +143,10 @@ export const ShiftAttendanceModule: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-zinc-300">
+            <Calendar className="h-4 w-4" />
+            <input type="date" value={selectedDate} onChange={event => setSelectedDate(event.target.value)} className="bg-transparent outline-none" />
+          </label>
           <button
             onClick={openPunchInModal}
             className="px-4 py-2 text-xs font-bold bg-emerald-500 text-zinc-950 rounded-xl hover:bg-emerald-400 flex items-center gap-2 shadow-lg shadow-emerald-500/10 transition-all"
@@ -166,7 +181,7 @@ export const ShiftAttendanceModule: React.FC = () => {
         />
         <StatCard
           title="Logged Overtime (OT)"
-          value={`${shifts.reduce((sum, s) => sum + (s.overtimeHours || 0), 0)} Hours`}
+          value={`${dateShifts.reduce((sum, s) => sum + (s.overtimeHours || 0), 0)} Hours`}
           subtitle="Total OT logged"
           icon={Clock}
           accentColor="amber"

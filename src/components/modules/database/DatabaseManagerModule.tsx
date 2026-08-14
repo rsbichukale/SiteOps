@@ -5,11 +5,11 @@ import {
   Database, HardHat, Package, FileText, Download, Upload, Plus, Trash2, Edit2, Check,
   Search, RefreshCw, Server, AlertTriangle, ShieldCheck, Copy, Eye, Building, Truck, Banknote, Users
 } from 'lucide-react';
-import { ContractorMaster, MaterialCategory, ExpenseCategory, EquipmentTypeMaster, Supplier } from '@/types';
+import { ContractorMaster, MaterialCategory, ExpenseCategory, EquipmentTypeMaster, Supplier, Site } from '@/types';
 import {
   getAppState, saveContractor, deleteContractor, saveMaterialCategory, deleteMaterialCategory,
   saveExpenseCategory, deleteExpenseCategory, saveEquipmentType, deleteEquipmentType,
-  saveSupplier, deleteSupplier, exportDatabaseBackup, importDatabaseBackup
+  saveSupplier, deleteSupplier, saveSite, deleteSite, exportDatabaseBackup, importDatabaseBackup
 } from '@/lib/dbState';
 import { Modal } from '@/components/ui/Modal';
 import { Badge } from '@/components/ui/Badge';
@@ -19,8 +19,21 @@ import { useSiteOpsState } from '@/hooks/useSiteOpsState';
 
 export const DatabaseManagerModule: React.FC = () => {
   const { state, updateState } = useSiteOpsState();
-  const [activeTab, setActiveTab] = useState<'contractors' | 'materialCategories' | 'expenseCategories' | 'equipmentTypes' | 'suppliers'>('contractors');
+  const [activeTab, setActiveTab] = useState<'projects' | 'contractors' | 'materialCategories' | 'expenseCategories' | 'equipmentTypes' | 'suppliers'>('projects');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Project Form State
+  const [showProjectModal, setShowProjectModal] = useState(false);
+  const [editingProjectId, setEditingProjectId] = useState<number | null>(null);
+  const [projectName, setProjectName] = useState('');
+  const [projectCode, setProjectCode] = useState('');
+  const [projectLocation, setProjectLocation] = useState('');
+  const [projectClient, setProjectClient] = useState('');
+  const [projectDescription, setProjectDescription] = useState('');
+  const [projectStartDate, setProjectStartDate] = useState('');
+  const [projectTargetEndDate, setProjectTargetEndDate] = useState('');
+  const [projectStatus, setProjectStatus] = useState<Site['status']>('ACTIVE');
+  const [isSavingProject, setIsSavingProject] = useState(false);
 
   // Contractor Form State
   const [showContractorModal, setShowContractorModal] = useState(false);
@@ -70,6 +83,66 @@ export const DatabaseManagerModule: React.FC = () => {
     // State is automatically synced via useSiteOpsState listener
   };
 
+  // --- Project Handlers ---
+  const handleOpenAddProject = () => {
+    setEditingProjectId(null);
+    setProjectName('');
+    setProjectCode('');
+    setProjectLocation('');
+    setProjectClient('');
+    setProjectDescription('');
+    setProjectStartDate('');
+    setProjectTargetEndDate('');
+    setProjectStatus('ACTIVE');
+    setShowProjectModal(true);
+  };
+
+  const handleOpenEditProject = (project: Site) => {
+    setEditingProjectId(project.id);
+    setProjectName(project.name);
+    setProjectCode(project.code || '');
+    setProjectLocation(project.location || '');
+    setProjectClient(project.clientName || '');
+    setProjectDescription(project.description || '');
+    setProjectStartDate(project.startDate || '');
+    setProjectTargetEndDate(project.targetEndDate || '');
+    setProjectStatus(project.status || 'ACTIVE');
+    setShowProjectModal(true);
+  };
+
+  const handleSaveProject = async () => {
+    if (!projectName.trim() || isSavingProject) return;
+    setIsSavingProject(true);
+    const result = await saveSite({
+      id: editingProjectId || 0,
+      name: projectName.trim(),
+      code: projectCode.trim() || undefined,
+      location: projectLocation.trim() || undefined,
+      clientName: projectClient.trim() || undefined,
+      description: projectDescription.trim() || undefined,
+      startDate: projectStartDate || undefined,
+      targetEndDate: projectTargetEndDate || undefined,
+      status: projectStatus,
+    });
+    setIsSavingProject(false);
+    if (!result.success) {
+      alert(`Project was not saved to Supabase: ${result.errors.map(error => error.message).join('; ')}`);
+      return;
+    }
+    setShowProjectModal(false);
+    showToast(`Project "${projectName}" saved to Supabase.`);
+  };
+
+  const handleDeleteProject = async (project: Site) => {
+    if (!confirm(`Delete project "${project.name}" from Supabase?`)) return;
+    const result = await deleteSite(project.id);
+    if (!result.success) {
+      alert(`Project was not deleted from Supabase: ${result.errors.map(error => error.message).join('; ')}`);
+      return;
+    }
+    showToast(`Project "${project.name}" deleted.`);
+  };
+
   // --- Contractor Handlers ---
   const handleOpenAddContractor = () => {
     setEditingContractorId(null);
@@ -91,9 +164,9 @@ export const DatabaseManagerModule: React.FC = () => {
     setShowContractorModal(true);
   };
 
-  const handleSaveContractor = () => {
+  const handleSaveContractor = async () => {
     if (!contractorName.trim()) return;
-    saveContractor({
+    const result = await saveContractor({
       id: editingContractorId || 0,
       name: contractorName.trim(),
       trade: contractorTrade,
@@ -102,14 +175,16 @@ export const DatabaseManagerModule: React.FC = () => {
       defaultRatePerWorker: contractorRate || undefined,
       notes: contractorNotes.trim() || undefined,
     });
+    if (!result.success) return;
     refreshState();
     setShowContractorModal(false);
     showToast(`Contractor "${contractorName}" saved successfully!`);
   };
 
-  const handleDeleteContractor = (id: number, name: string) => {
+  const handleDeleteContractor = async (id: number, name: string) => {
     if (confirm(`Delete contractor "${name}"?`)) {
-      deleteContractor(id);
+      const result = await deleteContractor(id);
+      if (!result.success) return;
       refreshState();
       showToast(`Contractor "${name}" deleted.`);
     }
@@ -134,23 +209,25 @@ export const DatabaseManagerModule: React.FC = () => {
     setShowCatModal(true);
   };
 
-  const handleSaveCat = () => {
+  const handleSaveCat = async () => {
     if (!catName.trim()) return;
-    saveMaterialCategory({
+    const result = await saveMaterialCategory({
       id: editingCatId || 0,
       name: catName.trim(),
       code: catCode.trim() || catName.toUpperCase().replace(/\s+/g, '_'),
       defaultUnit: catUnit.trim() || 'units',
       lowStockThreshold: Number(catThreshold) || 10
     });
+    if (!result.success) return;
     refreshState();
     setShowCatModal(false);
     showToast(`Material Category "${catName}" saved!`);
   };
 
-  const handleDeleteCat = (id: number, name: string) => {
+  const handleDeleteCat = async (id: number, name: string) => {
     if (confirm(`Delete Material Category "${name}"?`)) {
-      deleteMaterialCategory(id);
+      const result = await deleteMaterialCategory(id);
+      if (!result.success) return;
       refreshState();
       showToast(`Category "${name}" deleted.`);
     }
@@ -163,20 +240,22 @@ export const DatabaseManagerModule: React.FC = () => {
     setShowExpModal(true);
   };
 
-  const handleSaveExp = () => {
+  const handleSaveExp = async () => {
     if (!expName.trim()) return;
-    saveExpenseCategory({
+    const result = await saveExpenseCategory({
       id: editingExpId || 0,
       name: expName.trim()
     });
+    if (!result.success) return;
     refreshState();
     setShowExpModal(false);
     showToast(`Expense Category "${expName}" saved!`);
   };
 
-  const handleDeleteExp = (id: number, name: string) => {
+  const handleDeleteExp = async (id: number, name: string) => {
     if (confirm(`Delete Expense Category "${name}"?`)) {
-      deleteExpenseCategory(id);
+      const result = await deleteExpenseCategory(id);
+      if (!result.success) return;
       refreshState();
       showToast(`Expense Category "${name}" deleted.`);
     }
@@ -190,21 +269,23 @@ export const DatabaseManagerModule: React.FC = () => {
     setShowEqModal(true);
   };
 
-  const handleSaveEq = () => {
+  const handleSaveEq = async () => {
     if (!eqName.trim()) return;
-    saveEquipmentType({
+    const result = await saveEquipmentType({
       id: editingEqId || 0,
       name: eqName.trim(),
       category: eqCategory
     });
+    if (!result.success) return;
     refreshState();
     setShowEqModal(false);
     showToast(`Equipment Type "${eqName}" saved!`);
   };
 
-  const handleDeleteEq = (id: number, name: string) => {
+  const handleDeleteEq = async (id: number, name: string) => {
     if (confirm(`Delete Equipment Type "${name}"?`)) {
-      deleteEquipmentType(id);
+      const result = await deleteEquipmentType(id);
+      if (!result.success) return;
       refreshState();
       showToast(`Equipment Type "${name}" deleted.`);
     }
@@ -225,11 +306,15 @@ export const DatabaseManagerModule: React.FC = () => {
   const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Backup files are limited to 5 MB.');
+      return;
+    }
 
     const reader = new FileReader();
-    reader.onload = event => {
+    reader.onload = async event => {
       const content = event.target?.result as string;
-      if (content && importDatabaseBackup(content)) {
+      if (content && await importDatabaseBackup(content)) {
         refreshState();
         showToast('Database restored successfully from backup JSON!');
       } else {
@@ -275,6 +360,17 @@ export const DatabaseManagerModule: React.FC = () => {
       {/* Master Tabs */}
       <div className="flex flex-wrap items-center gap-2 border-b border-zinc-800 pb-2">
         <button
+          onClick={() => setActiveTab('projects')}
+          className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
+            activeTab === 'projects'
+              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold'
+              : 'text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          <Building className="w-4 h-4" /> Projects
+        </button>
+
+        <button
           onClick={() => setActiveTab('contractors')}
           className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
             activeTab === 'contractors'
@@ -319,6 +415,60 @@ export const DatabaseManagerModule: React.FC = () => {
         </button>
 
       </div>
+
+      {/* PROJECTS */}
+      {activeTab === 'projects' && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+            <h2 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+              <Building className="w-4 h-4 text-emerald-400" />
+              Supabase Projects Register ({state.sites.length})
+            </h2>
+            <button onClick={handleOpenAddProject} className="px-3 py-1.5 text-xs font-bold bg-emerald-500 text-zinc-950 rounded-lg hover:bg-emerald-400 flex items-center gap-1 shadow">
+              <Plus className="w-4 h-4" /> Add Project
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-zinc-300">
+              <thead className="bg-zinc-950 text-zinc-400 uppercase tracking-wider text-[10px] border-b border-zinc-800">
+                <tr>
+                  <th className="px-4 py-3">Project</th>
+                  <th className="px-4 py-3">Code</th>
+                  <th className="px-4 py-3">Location / Client</th>
+                  <th className="px-4 py-3">Schedule</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/60">
+                {state.sites.map(project => (
+                  <tr key={project.id} className="hover:bg-zinc-950/50">
+                    <td className="px-4 py-3">
+                      <div className="font-semibold text-zinc-100">{project.name}</div>
+                      <div className="text-[10px] text-zinc-500 max-w-xs truncate">{project.description || 'No description'}</div>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-emerald-400">{project.code || '-'}</td>
+                    <td className="px-4 py-3">
+                      <div>{project.location || '-'}</div>
+                      <div className="text-[10px] text-zinc-500">{project.clientName || 'No client recorded'}</div>
+                    </td>
+                    <td className="px-4 py-3 text-zinc-400">{project.startDate || '-'} → {project.targetEndDate || '-'}</td>
+                    <td className="px-4 py-3"><Badge variant={project.status === 'ACTIVE' ? 'emerald' : 'zinc'}>{project.status}</Badge></td>
+                    <td className="px-4 py-3 text-right space-x-2">
+                      <button onClick={() => handleOpenEditProject(project)} className="p-1 text-zinc-400 hover:text-emerald-400" title="Edit Project"><Edit2 className="w-4 h-4" /></button>
+                      <button onClick={() => handleDeleteProject(project)} className="p-1 text-zinc-400 hover:text-rose-400" title="Delete Project"><Trash2 className="w-4 h-4" /></button>
+                    </td>
+                  </tr>
+                ))}
+                {state.sites.length === 0 && (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-zinc-500">No projects in Supabase. Add the first project here.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* 1. CONTRACTORS MASTER */}
       {activeTab === 'contractors' && (
@@ -488,8 +638,34 @@ export const DatabaseManagerModule: React.FC = () => {
           </div>
         </div>
       )}
-
-
+      {/* Project Modal */}
+      <Modal isOpen={showProjectModal} onClose={() => setShowProjectModal(false)} title={editingProjectId ? 'Edit Project' : 'Create Project'}>
+        <div className="space-y-4">
+          <FormInput label="Project Name" value={projectName} onChange={e => setProjectName(e.target.value)} placeholder="e.g. Riverside Residency Phase 1" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <FormInput label="Project Code" value={projectCode} onChange={e => setProjectCode(e.target.value)} placeholder="e.g. RR-P1" />
+            <FormInput label="Location" value={projectLocation} onChange={e => setProjectLocation(e.target.value)} placeholder="City / site address" />
+          </div>
+          <FormInput label="Client Name" value={projectClient} onChange={e => setProjectClient(e.target.value)} placeholder="Client / developer" />
+          <FormInput label="Description" value={projectDescription} onChange={e => setProjectDescription(e.target.value)} placeholder="Project scope or notes" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <FormInput label="Start Date" type="date" value={projectStartDate} onChange={e => setProjectStartDate(e.target.value)} />
+            <FormInput label="Target End Date" type="date" value={projectTargetEndDate} onChange={e => setProjectTargetEndDate(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-xs font-medium text-zinc-300">Status</label>
+            <select value={projectStatus} onChange={e => setProjectStatus(e.target.value as Site['status'])} className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200">
+              <option value="ACTIVE">Active</option>
+              <option value="ON_HOLD">On Hold</option>
+              <option value="COMPLETED">Completed</option>
+            </select>
+          </div>
+          <div className="flex justify-end gap-2 pt-3">
+            <button onClick={() => setShowProjectModal(false)} className="px-4 py-2 text-xs font-medium bg-zinc-800 text-zinc-300 rounded-lg">Cancel</button>
+            <button onClick={handleSaveProject} disabled={isSavingProject} className="px-4 py-2 text-xs font-bold bg-emerald-500 text-zinc-950 rounded-lg disabled:opacity-50">{isSavingProject ? 'Saving…' : 'Save to Supabase'}</button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Contractor Modal */}
       <Modal isOpen={showContractorModal} onClose={() => setShowContractorModal(false)} title={editingContractorId ? 'Alter Contractor Record' : 'Create New Contractor'}>

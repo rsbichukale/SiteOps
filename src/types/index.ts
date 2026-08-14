@@ -115,6 +115,8 @@ export interface Expense {
   paymentMode: 'CASH' | 'UPI' | 'BANK_TRANSFER' | 'OTHER';
   receiptPhotoUrl?: string;
   dateLogged: string;
+  status?: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+  sourceEquipmentPaymentId?: number;
 }
 
 export interface FundRequisition {
@@ -303,6 +305,7 @@ export interface NCRReport {
   rectificationPhotoUrl?: string;
   createdAt: string;
   closedAt?: string;
+  sourceMaterialInwardId?: number;
 }
 
 // ==========================================
@@ -311,6 +314,15 @@ export interface NCRReport {
 export interface Site {
   id: number;
   name: string;
+  code?: string;
+  location?: string;
+  clientName?: string;
+  description?: string;
+  startDate?: string;
+  targetEndDate?: string;
+  status: 'ACTIVE' | 'ON_HOLD' | 'COMPLETED';
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AppUser {
@@ -456,4 +468,3 @@ export interface DailyProgressReport {
   createdByName?: string;
   createdAt?: string;
 }
-

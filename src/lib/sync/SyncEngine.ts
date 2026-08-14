@@ -1,5 +1,4 @@
-import { fetchStateFromSupabase } from '../supabaseSync';
-import { getAppState, saveAppState } from '../dbState';
+import { initializeAppStateFromSupabase } from '../dbState';
 
 export interface SyncStatus {
   isOnline: boolean;
@@ -52,20 +51,17 @@ class SyncEngineManager {
     this.notify();
 
     try {
-      const remoteData = await fetchStateFromSupabase();
-      if (remoteData) {
-        saveAppState(remoteData);
-        this.status.lastSyncedAt = new Date().toISOString();
-        console.log('[SyncEngine] Successfully synced state with Supabase cloud!');
-      }
+      await initializeAppStateFromSupabase();
+      this.status.lastSyncedAt = new Date().toISOString();
+      console.log('[SyncEngine] Successfully synced state with Supabase cloud!');
+      return true;
     } catch (err) {
       console.error('[SyncEngine] Cloud sync failed:', err);
+      return false;
     } finally {
       this.status.isSyncing = false;
       this.notify();
     }
-
-    return true;
   }
 
   private notify() {

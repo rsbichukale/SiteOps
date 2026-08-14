@@ -21,8 +21,11 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectTab }) => 
   const lowStockItems = Object.values(stockSummary).filter(s => s.isLowStock);
   const totalSpent = state.expenses.reduce((sum, e) => sum + e.amount, 0);
   const activeEquipCount = state.equipment.filter(e => e.status === 'ACTIVE').length;
-  const todayVisitorsCount = state.visitors.length;
-  const safetyPassCount = state.safetyChecklists[0]?.overallScore || 10;
+  const today = new Date().toISOString().slice(0, 10);
+  const todayVisitorsCount = state.visitors.filter(visitor => visitor.entryTime.slice(0, 10) === today).length;
+  const latestSafetyChecklist = state.safetyChecklists.find(item => item.dateLogged.slice(0, 10) === today) ?? state.safetyChecklists[0];
+  const safetyPassCount = latestSafetyChecklist?.overallScore ?? 0;
+  const safetyTotalCount = latestSafetyChecklist?.totalChecks ?? 0;
   const pendingCubesCount = state.cubeTests.filter(c => c.status === 'PENDING').length;
 
   return (
@@ -175,7 +178,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectTab }) => 
           </div>
           <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-xs">
             <span className="text-zinc-500">Daily Safety Score:</span>
-            <span className="text-emerald-400 font-bold">{safetyPassCount}/10 Passed</span>
+            <span className="text-emerald-400 font-bold">{safetyPassCount}/{safetyTotalCount} Passed</span>
           </div>
         </div>
 

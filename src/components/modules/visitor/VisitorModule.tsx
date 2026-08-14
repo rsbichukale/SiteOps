@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import { Users, Plus, Camera, Calendar, UserCheck, MessageSquare, Image, CheckCircle, Clock } from 'lucide-react';
 import { Visitor, Meeting, SitePhoto } from '@/types';
 import { getAppState, saveAppState } from '@/lib/dbState';
+import { createLocalId } from '@/lib/ids';
+import { isTrustedAssetUrl } from '@/lib/supabaseClient';
 
 import { useSiteOpsState } from '@/hooks/useSiteOpsState';
 
@@ -38,12 +40,12 @@ export const VisitorModule: React.FC = () => {
     category: 'PROGRESS' as const,
   });
 
-  const handleAddVisitor = (e: React.FormEvent) => {
+  const handleAddVisitor = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!visitorForm.visitorName.trim()) return;
 
     const newVisitor: Visitor = {
-      id: Date.now(),
+      id: createLocalId(),
       visitorName: visitorForm.visitorName.trim(),
       companyRole: visitorForm.companyRole,
       purpose: visitorForm.purpose,
@@ -52,9 +54,10 @@ export const VisitorModule: React.FC = () => {
       notes: visitorForm.notes,
     };
 
-    saveAppState({
+    const result = await saveAppState({
       visitors: [newVisitor, ...state.visitors],
     });
+    if (!result.success) return;
 
     setIsVisitorModalOpen(false);
     setVisitorForm({
@@ -66,12 +69,12 @@ export const VisitorModule: React.FC = () => {
     });
   };
 
-  const handleAddMeeting = (e: React.FormEvent) => {
+  const handleAddMeeting = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!meetingForm.title.trim()) return;
 
     const newMeeting: Meeting = {
-      id: Date.now(),
+      id: createLocalId(),
       title: meetingForm.title.trim(),
       meetingDate: new Date().toISOString(),
       attendees: meetingForm.attendees.split(',').map(s => s.trim()).filter(Boolean),
@@ -80,32 +83,45 @@ export const VisitorModule: React.FC = () => {
       actionItems: [],
     };
 
-    saveAppState({
+    const result = await saveAppState({
       meetings: [newMeeting, ...state.meetings],
     });
+    if (!result.success) return;
 
     setIsMeetingModalOpen(false);
     setMeetingForm({ title: '', attendees: '', agenda: '', decisions: '' });
   };
 
-  const handleAddPhoto = (e: React.FormEvent) => {
+  const handleAddPhoto = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!photoForm.caption.trim()) return;
+    if (!photoForm.caption.trim() || !isTrustedAssetUrl(photoForm.photoUrl)) {
+      alert('Enter a valid photo URL from this project\'s Supabase Storage.');
+      return;
+    }
 
     const newPhoto: SitePhoto = {
-      id: Date.now(),
+      id: createLocalId(),
       caption: photoForm.caption.trim(),
-      photoUrl: photoForm.photoUrl || 'https://images.unsplash.com/photo-1541888946425-d0fbb186a5b7?w=800&auto=format&fit=crop&q=80',
+      photoUrl: photoForm.photoUrl,
       category: photoForm.category,
       dateTaken: new Date().toISOString(),
     };
 
-    saveAppState({
+    const result = await saveAppState({
       sitePhotos: [newPhoto, ...state.sitePhotos],
     });
+    if (!result.success) return;
 
     setIsPhotoModalOpen(false);
     setPhotoForm({ caption: '', photoUrl: '', category: 'PROGRESS' });
+  };
+
+  const handleVisitorCheckout = async (visitorId: number) => {
+    await saveAppState({
+      visitors: state.visitors.map(visitor => visitor.id === visitorId
+        ? { ...visitor, exitTime: new Date().toISOString() }
+        : visitor),
+    });
   };
 
   return (
@@ -206,6 +222,11 @@ export const VisitorModule: React.FC = () => {
                   <div className="text-right text-[11px] text-zinc-500">
                     <div>{new Date(v.entryTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                     <div className="text-zinc-400">{new Date(v.entryTime).toLocaleDateString()}</div>
+                    {v.exitTime ? (
+                      <div className="mt-1 text-emerald-400">Checked out {new Date(v.exitTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                    ) : (
+                      <button onClick={() => handleVisitorCheckout(v.id)} className="mt-2 rounded-lg bg-emerald-600 px-2 py-1 font-semibold text-zinc-950">Check out</button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -268,7 +289,11 @@ export const VisitorModule: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {state.sitePhotos.map((p) => (
                 <div key={p.id} className="rounded-xl bg-zinc-900 border border-zinc-800 overflow-hidden">
-                  <img src={p.photoUrl} alt={p.caption} className="w-full h-48 object-cover" />
+                  {isTrustedAssetUrl(p.photoUrl) ? (
+                    <img src={p.photoUrl} alt={p.caption} referrerPolicy="no-referrer" className="w-full h-48 object-cover" />
+                  ) : (
+                    <div className="grid h-48 place-items-center bg-zinc-950 text-xs text-zinc-500">Untrusted photo URL blocked</div>
+                  )}
                   <div className="p-3 space-y-1">
                     <span className="text-[10px] font-bold text-emerald-400 uppercase">{p.category}</span>
                     <div className="text-xs font-semibold text-white">{p.caption}</div>
@@ -393,7 +418,7 @@ export const VisitorModule: React.FC = () => {
               </select>
               <input
                 type="text"
-                placeholder="Photo URL (optional)"
+                placeholder="Supabase Storage photo URL"
                 value={photoForm.photoUrl}
                 onChange={(e) => setPhotoForm({ ...photoForm, photoUrl: e.target.value })}
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-2.5 text-white"

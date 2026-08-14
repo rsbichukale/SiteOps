@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ShieldCheck, AlertOctagon, CheckCircle2, XCircle, Plus, Camera, User, FileText, HardHat } from 'lucide-react';
 import { SafetyChecklistRecord, SafetyIncident, PPEIssuance } from '@/types';
 import { getAppState, saveAppState } from '@/lib/dbState';
+import { createLocalId } from '@/lib/ids';
 
 import { useSiteOpsState } from '@/hooks/useSiteOpsState';
 
@@ -21,6 +22,16 @@ export const SafetyModule: React.FC = () => {
     });
     return initial;
   });
+
+  useEffect(() => {
+    setTodayChecks(previous => {
+      const next = { ...previous };
+      for (const item of state.safetyCheckItems) {
+        if (!(item.id in next)) next[item.id] = true;
+      }
+      return next;
+    });
+  }, [state.safetyCheckItems]);
 
   // Incident Form State
   const [incidentForm, setIncidentForm] = useState({
@@ -48,36 +59,36 @@ export const SafetyModule: React.FC = () => {
     }));
   };
 
-  const handleSaveChecklist = () => {
+  const handleSaveChecklist = async () => {
     const total = state.safetyCheckItems.length;
-    const passedCount = Object.values(todayChecks).filter(Boolean).length;
+    const passedCount = state.safetyCheckItems.filter(item => todayChecks[item.id] === true).length;
 
     const record: SafetyChecklistRecord = {
-      id: Date.now(),
+      id: createLocalId(),
       dateLogged: new Date().toISOString().split('T')[0],
       checks: state.safetyCheckItems.map(item => ({
         checkItemId: item.id,
         itemText: item.itemText,
-        passed: todayChecks[item.id] ?? true,
+        passed: todayChecks[item.id] === true,
       })),
       overallScore: passedCount,
       totalChecks: total,
       inspectorName: state.currentUser?.name || 'Site Engineer',
     };
 
-    saveAppState({
+    const result = await saveAppState({
       safetyChecklists: [record, ...state.safetyChecklists.filter(c => c.dateLogged !== record.dateLogged)],
     });
-
+    if (!result.success) return;
     alert(`Daily Safety Audit Saved! Score: ${passedCount}/${total}`);
   };
 
-  const handleAddIncident = (e: React.FormEvent) => {
+  const handleAddIncident = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!incidentForm.description.trim()) return;
 
     const newIncident: SafetyIncident = {
-      id: Date.now(),
+      id: createLocalId(),
       dateTime: new Date().toISOString(),
       severity: incidentForm.severity,
       description: incidentForm.description.trim(),
@@ -89,9 +100,10 @@ export const SafetyModule: React.FC = () => {
       status: 'OPEN',
     };
 
-    saveAppState({
+    const result = await saveAppState({
       safetyIncidents: [newIncident, ...state.safetyIncidents],
     });
+    if (!result.success) return;
 
     setIsIncidentModalOpen(false);
     setIncidentForm({
@@ -105,12 +117,12 @@ export const SafetyModule: React.FC = () => {
     });
   };
 
-  const handleAddPpe = (e: React.FormEvent) => {
+  const handleAddPpe = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!ppeForm.workerName.trim()) return;
 
     const newPpe: PPEIssuance = {
-      id: Date.now(),
+      id: createLocalId(),
       workerName: ppeForm.workerName.trim(),
       contractorName: ppeForm.contractorName,
       item: ppeForm.item,
@@ -119,9 +131,10 @@ export const SafetyModule: React.FC = () => {
       returned: false,
     };
 
-    saveAppState({
+    const result = await saveAppState({
       ppeIssuance: [newPpe, ...state.ppeIssuance],
     });
+    if (!result.success) return;
 
     setIsPpeModalOpen(false);
     setPpeForm({ workerName: '', contractorName: '', item: 'HELMET', quantity: '1' });

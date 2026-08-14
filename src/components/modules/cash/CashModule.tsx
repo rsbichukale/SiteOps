@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Banknote, Plus, Coffee, Truck, ShoppingBag, Fuel, FileText, Cross, MoreHorizontal, DollarSign, Calendar, ArrowUpRight } from 'lucide-react';
 import { Expense, FundRequisition } from '@/types';
 import { getAppState, saveAppState } from '@/lib/dbState';
+import { createLocalId } from '@/lib/ids';
 
 import { useSiteOpsState } from '@/hooks/useSiteOpsState';
 
@@ -28,24 +29,26 @@ export const CashModule: React.FC = () => {
     purpose: '',
   });
 
-  const handleAddExpense = (e: React.FormEvent) => {
+  const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = Number(expenseForm.amount);
     if (!amt || amt <= 0) return;
 
     const newExpense: Expense = {
-      id: Date.now(),
+      id: createLocalId(),
       category: expenseForm.category,
       description: expenseForm.description || expenseForm.category,
       amount: amt,
       paidTo: expenseForm.paidTo,
       paymentMode: expenseForm.paymentMode,
       dateLogged: new Date().toISOString().split('T')[0],
+      status: 'APPROVED',
     };
 
-    saveAppState({
+    const result = await saveAppState({
       expenses: [newExpense, ...state.expenses],
     });
+    if (!result.success) return;
 
     setIsExpenseModalOpen(false);
     setExpenseForm({
@@ -57,38 +60,50 @@ export const CashModule: React.FC = () => {
     });
   };
 
-  const handleAddRequisition = (e: React.FormEvent) => {
+  const handleAddRequisition = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = Number(reqForm.amountRequested);
     if (!amt || amt <= 0) return;
 
     const newReq: FundRequisition = {
-      id: Date.now(),
+      id: createLocalId(),
       amountRequested: amt,
       purpose: reqForm.purpose,
       status: 'PENDING',
       dateRequested: new Date().toISOString().split('T')[0],
     };
 
-    saveAppState({
+    const result = await saveAppState({
       fundRequisitions: [newReq, ...state.fundRequisitions],
     });
+    if (!result.success) return;
 
     setIsRequisitionModalOpen(false);
     setReqForm({ amountRequested: '', purpose: '' });
   };
 
-  const handleApproveExpense = (id: number) => {
+  const handleApproveExpense = async (id: number) => {
     const updated = state.expenses.map(e => {
       if (e.id === id) {
         return {
           ...e,
-          description: e.description.replace('[DRAFT Expense - Pending Approval]', '[APPROVED Expense]'),
+          status: 'APPROVED' as const,
         };
       }
       return e;
     });
-    saveAppState({ expenses: updated });
+    await saveAppState({ expenses: updated });
+  };
+
+  const handleRequisitionStatus = async (id: number, status: FundRequisition['status']) => {
+    await saveAppState({
+      fundRequisitions: state.fundRequisitions.map(requisition => requisition.id === id ? {
+        ...requisition,
+        status,
+        amountReceived: status === 'RECEIVED' ? requisition.amountRequested : requisition.amountReceived,
+        dateReceived: status === 'RECEIVED' ? new Date().toISOString().slice(0, 10) : requisition.dateReceived,
+      } : requisition),
+    });
   };
 
   const totalSpent = state.expenses.reduce((sum, e) => sum + e.amount, 0);
@@ -173,7 +188,7 @@ export const CashModule: React.FC = () => {
           ) : (
             <div className="space-y-2">
               {state.expenses.map((e) => {
-                const isDraft = e.description.includes('[DRAFT Expense');
+                const isDraft = e.status === 'PENDING_APPROVAL' || (!e.status && e.description.includes('[DRAFT Expense'));
                 return (
                   <div key={e.id} className={`p-4 rounded-xl border flex items-center justify-between transition ${
                     isDraft ? 'bg-amber-950/20 border-amber-500/30' : 'bg-zinc-900 border-zinc-800'
@@ -236,6 +251,15 @@ export const CashModule: React.FC = () => {
                     <span className="inline-block px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
                       {r.status}
                     </span>
+                    <div className="flex justify-end gap-1">
+                      {r.status === 'PENDING' && (
+                        <>
+                          <button onClick={() => handleRequisitionStatus(r.id, 'APPROVED')} className="rounded bg-emerald-600 px-2 py-1 text-[10px] font-bold text-zinc-950">Approve</button>
+                          <button onClick={() => handleRequisitionStatus(r.id, 'REJECTED')} className="rounded bg-red-700 px-2 py-1 text-[10px] font-bold text-white">Reject</button>
+                        </>
+                      )}
+                      {r.status === 'APPROVED' && <button onClick={() => handleRequisitionStatus(r.id, 'RECEIVED')} className="rounded bg-sky-600 px-2 py-1 text-[10px] font-bold text-white">Mark received</button>}
+                    </div>
                   </div>
                 </div>
               ))}

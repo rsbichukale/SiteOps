@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Truck, Plus, Clock, Fuel, Wrench, DollarSign, Calendar, AlertCircle } from 'lucide-react';
 import { Equipment, EquipmentUsage, EquipmentPayment } from '@/types';
-import { getAppState, saveAppState, createDraftExpenseFromMachineryPayment } from '@/lib/dbState';
+import { getAppState, saveAppState, buildDraftExpenseFromMachineryPayment } from '@/lib/dbState';
+import { createLocalId } from '@/lib/ids';
 
 import { useSiteOpsState } from '@/hooks/useSiteOpsState';
 
@@ -43,7 +44,14 @@ export const MachineryModule: React.FC = () => {
     notes: '',
   });
 
-  const handleAddPayment = (e: React.FormEvent) => {
+  useEffect(() => {
+    const firstEquipment = state.equipment[0];
+    if (!firstEquipment) return;
+    if (!state.equipment.some(item => item.id === Number(usageForm.equipmentId))) setUsageForm(previous => ({ ...previous, equipmentId: firstEquipment.id }));
+    if (!state.equipment.some(item => item.id === Number(paymentForm.equipmentId))) setPaymentForm(previous => ({ ...previous, equipmentId: firstEquipment.id }));
+  }, [state.equipment, usageForm.equipmentId, paymentForm.equipmentId]);
+
+  const handleAddPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     const equipId = Number(paymentForm.equipmentId) || state.equipment[0]?.id;
     const amount = Number(paymentForm.amountPaid);
@@ -52,7 +60,7 @@ export const MachineryModule: React.FC = () => {
     const equip = state.equipment.find(eq => eq.id === equipId);
 
     const newPayment: EquipmentPayment = {
-      id: Date.now(),
+      id: createLocalId(),
       equipmentId: equipId,
       amountPaid: amount,
       paymentDate: new Date().toISOString().split('T')[0],
@@ -60,11 +68,12 @@ export const MachineryModule: React.FC = () => {
       notes: paymentForm.notes,
     };
 
-    saveAppState({
+    const draftExpense = buildDraftExpenseFromMachineryPayment(newPayment, equip?.name);
+    const result = await saveAppState({
       equipmentPayments: [newPayment, ...(state.equipmentPayments || [])],
+      expenses: [draftExpense, ...(state.expenses || [])],
     });
-
-    createDraftExpenseFromMachineryPayment(newPayment, equip?.name);
+    if (!result.success) return;
 
     setIsPaymentModalOpen(false);
     setPaymentForm({
@@ -75,12 +84,12 @@ export const MachineryModule: React.FC = () => {
     });
   };
 
-  const handleAddEquipment = (e: React.FormEvent) => {
+  const handleAddEquipment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!equipForm.name.trim()) return;
 
     const newEquip: Equipment = {
-      id: Date.now(),
+      id: createLocalId(),
       equipmentType: equipForm.equipmentType,
       name: equipForm.name.trim(),
       isRented: equipForm.isRented,
@@ -92,9 +101,10 @@ export const MachineryModule: React.FC = () => {
       status: 'ACTIVE',
     };
 
-    saveAppState({
+    const result = await saveAppState({
       equipment: [newEquip, ...state.equipment],
     });
+    if (!result.success) return;
 
     setIsEquipModalOpen(false);
     setEquipForm({
@@ -108,13 +118,13 @@ export const MachineryModule: React.FC = () => {
     });
   };
 
-  const handleAddUsage = (e: React.FormEvent) => {
+  const handleAddUsage = async (e: React.FormEvent) => {
     e.preventDefault();
     const equipId = Number(usageForm.equipmentId);
     if (!equipId) return;
 
     const newUsage: EquipmentUsage = {
-      id: Date.now(),
+      id: createLocalId(),
       equipmentId: equipId,
       dateLogged: new Date().toISOString().split('T')[0],
       hoursOperated: Number(usageForm.hoursOperated) || 0,
@@ -124,9 +134,10 @@ export const MachineryModule: React.FC = () => {
       breakdownNotes: usageForm.breakdownNotes,
     };
 
-    saveAppState({
+    const result = await saveAppState({
       equipmentUsage: [newUsage, ...state.equipmentUsage],
     });
+    if (!result.success) return;
 
     setIsUsageModalOpen(false);
     setUsageForm({

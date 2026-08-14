@@ -11,6 +11,7 @@ export interface ContractorMaterialAllocation {
   issuedBy: string;
   dateIssued: string;
   createdAt: string;
+  sourceMaterialIssueId?: number;
 }
 
 export interface MaterialDamageDeduction {

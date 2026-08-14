@@ -15,10 +15,12 @@ import { SafetyModule } from '@/components/modules/safety/SafetyModule';
 import { QualityModule } from '@/components/modules/quality/QualityModule';
 import { WhatsAppReportModule } from '@/components/modules/reports/WhatsAppReportModule';
 import { DatabaseManagerModule } from '@/components/modules/database/DatabaseManagerModule';
+import { AuthScreen } from '@/components/auth/AuthScreen';
 
 import { ModuleTab } from '@/types';
 import { useSiteOpsState } from '@/hooks/useSiteOpsState';
-import { syncEngine } from '@/lib/sync/SyncEngine';
+import { initializeAppStateFromSupabase, resetAppState, selectActiveSite, setAuthenticatedUser } from '@/lib/dbState';
+import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 
 const VALID_TABS: ModuleTab[] = [
   'dashboard', 'attendance', 'material', 'cash', 'machinery', 'visitor',
@@ -30,8 +32,12 @@ export default function SiteOpsApp() {
   const [activeTab, setActiveTabState] = useState<ModuleTab>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDesktopSidebarPinned, setIsDesktopSidebarPinned] = useState(true);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const { state, updateState } = useSiteOpsState();
+  const { state } = useSiteOpsState();
 
   const handleSelectTab = useCallback((tab: ModuleTab) => {
     setActiveTabState(tab);
@@ -69,21 +75,74 @@ export default function SiteOpsApp() {
   }, []);
 
   useEffect(() => {
-    // Background cloud sync initialization
-    syncEngine.syncWithCloud().catch(err => {
-      console.error('[SiteOps] Initial sync failed:', err);
+    if (!supabase || !isSupabaseConfigured) {
+      setIsAuthLoading(false);
+      return;
+    }
+
+    let active = true;
+    const loadAuthenticatedUser = async (user: { id: string; email?: string; app_metadata?: Record<string, unknown> } | null) => {
+      if (!active) return;
+      if (!user) {
+        resetAppState();
+        setIsAuthenticated(false);
+        setIsAuthLoading(false);
+        return;
+      }
+
+      const email = user.email ?? '';
+      setAuthenticatedUser({
+        id: user.id,
+        username: email.split('@')[0] || 'user',
+        name: typeof user.app_metadata?.display_name === 'string' ? user.app_metadata.display_name : email.split('@')[0] || 'Site User',
+        role: 'engineer',
+        email,
+      });
+      setIsAuthenticated(true);
+      setLoadError(null);
+      try {
+        await initializeAppStateFromSupabase();
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (active) setIsAuthLoading(false);
+      }
+    };
+
+    supabase.auth.getUser().then(({ data }) => loadAuthenticatedUser(data.user));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      void loadAuthenticatedUser(session?.user ?? null);
     });
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
-  const handleSelectSite = (siteId: number) => {
-    updateState({ activeSiteId: siteId });
+  useEffect(() => {
+    const onSaveError = (event: Event) => {
+      const details = (event as CustomEvent<Array<{ message: string }>>).detail;
+      setSaveError(details?.map(item => item.message).join('; ') || 'The database rejected the save.');
+    };
+    window.addEventListener('siteops:save-error', onSaveError);
+    return () => window.removeEventListener('siteops:save-error', onSaveError);
+  }, []);
+
+  const handleSelectSite = async (siteId: number) => {
+    setLoadError(null);
+    try {
+      await selectActiveSite(siteId);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : String(error));
+    }
   };
 
-  const handleLogout = () => {
-    updateState({ currentUser: null });
+  const handleLogout = async () => {
+    await supabase?.auth.signOut();
+    resetAppState();
   };
 
-  if (!isMounted) {
+  if (!isMounted || isAuthLoading) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-400 text-sm font-sans">
         <div className="flex items-center space-x-2">
@@ -94,8 +153,16 @@ export default function SiteOpsApp() {
     );
   }
 
+  if (!isAuthenticated) return <AuthScreen />;
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans">
+      {(loadError || saveError) && (
+        <div className="sticky top-0 z-[100] flex items-center justify-between gap-3 bg-red-950 px-4 py-2 text-sm text-red-100">
+          <span>{loadError || saveError}</span>
+          <button className="font-bold" onClick={() => { setLoadError(null); setSaveError(null); }}>Dismiss</button>
+        </div>
+      )}
       {/* Header */}
       <Header
         sites={state.sites}
@@ -158,4 +225,3 @@ export default function SiteOpsApp() {
     </div>
   );
 }
-

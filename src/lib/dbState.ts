@@ -8,12 +8,8 @@ import {
   ContractorShiftRecord, ContractorMaterialAllocation, MaterialDamageDeduction
 } from '../types';
 
-import {
-  INITIAL_SITES, INITIAL_MATERIAL_CATEGORIES, INITIAL_EXPENSE_CATEGORIES,
-  INITIAL_EQUIPMENT_TYPES, INITIAL_SAFETY_CHECK_ITEMS
-} from './seedMasters';
-
-import { saveStateToSupabase, fetchStateFromSupabase } from './supabaseSync';
+import { saveStateToSupabase, fetchStateFromSupabase, SupabaseSaveResult, PersistedStateKey } from './supabaseSync';
+import { createLocalId } from './ids';
 
 export const INITIAL_CONTRACTORS_MASTER: ContractorMaster[] = [];
 
@@ -53,12 +49,15 @@ export interface SiteOpsState {
   contractorMaterialAllocations: ContractorMaterialAllocation[];
   materialDamageDeductions: MaterialDamageDeduction[];
 
-  activeSiteId: number;
+  activeSiteId: number | null;
   currentUser: AppUser | null;
 }
 
 let currentState: SiteOpsState | null = null;
 const listeners: Array<() => void> = [];
+let initializationPromise: Promise<SiteOpsState> | null = null;
+let initializationGeneration = 0;
+let saveQueue: Promise<void> = Promise.resolve();
 
 export function getAppState(): SiteOpsState {
   if (!currentState) {
@@ -67,44 +66,51 @@ export function getAppState(): SiteOpsState {
   return currentState;
 }
 
-export async function initializeAppStateFromSupabase(): Promise<SiteOpsState> {
-  const remoteState = await fetchStateFromSupabase();
-  if (remoteState) {
-    const current = getAppState();
-    currentState = {
-      ...current,
-      sites: remoteState.sites || current.sites,
-      contractorsMaster: remoteState.contractorsMaster || current.contractorsMaster,
-      materialCategories: remoteState.materialCategories || current.materialCategories,
-      suppliers: remoteState.suppliers || current.suppliers,
-      materialInward: remoteState.materialInward || current.materialInward,
-      materialIssued: remoteState.materialIssued || current.materialIssued,
-      materialWastage: remoteState.materialWastage || current.materialWastage,
-      expenseCategories: remoteState.expenseCategories || current.expenseCategories,
-      expenses: remoteState.expenses || current.expenses,
-      fundRequisitions: remoteState.fundRequisitions || current.fundRequisitions,
-      equipmentTypes: remoteState.equipmentTypes || current.equipmentTypes,
-      equipment: remoteState.equipment || current.equipment,
-      equipmentUsage: remoteState.equipmentUsage || current.equipmentUsage,
-      equipmentPayments: remoteState.equipmentPayments || current.equipmentPayments,
-      visitors: remoteState.visitors || current.visitors,
-      meetings: remoteState.meetings || current.meetings,
-      sitePhotos: remoteState.sitePhotos || current.sitePhotos,
-      safetyCheckItems: remoteState.safetyCheckItems || current.safetyCheckItems,
-      safetyChecklists: remoteState.safetyChecklists || current.safetyChecklists,
-      safetyIncidents: remoteState.safetyIncidents || current.safetyIncidents,
-      ppeIssuance: remoteState.ppeIssuance || current.ppeIssuance,
-      cubeTests: remoteState.cubeTests || current.cubeTests,
-      materialTests: remoteState.materialTests || current.materialTests,
-      ncrReports: remoteState.ncrReports || current.ncrReports,
-      dailyReports: remoteState.dailyReports || current.dailyReports,
-      contractorShifts: remoteState.contractorShifts || current.contractorShifts,
-      contractorMaterialAllocations: remoteState.contractorMaterialAllocations || current.contractorMaterialAllocations,
-      materialDamageDeductions: remoteState.materialDamageDeductions || current.materialDamageDeductions,
-    };
-    notifyListeners();
-  }
-  return getAppState();
+export function initializeAppStateFromSupabase(force = false): Promise<SiteOpsState> {
+  if (initializationPromise && !force) return initializationPromise;
+
+  const generation = ++initializationGeneration;
+  const preferredSiteId = getAppState().activeSiteId;
+  const request = (async () => {
+    const remote = await fetchStateFromSupabase(preferredSiteId);
+    if (remote && generation === initializationGeneration) {
+      const current = getAppState();
+      currentState = {
+        ...current,
+        ...remote.state,
+        activeSiteId: remote.activeSiteId,
+        currentUser: current.currentUser,
+      } as SiteOpsState;
+      notifyListeners();
+    }
+    return getAppState();
+  })();
+
+  const trackedRequest = request.finally(() => {
+    if (initializationPromise === trackedRequest) initializationPromise = null;
+  });
+  initializationPromise = trackedRequest;
+  return initializationPromise;
+}
+
+export async function selectActiveSite(siteId: number): Promise<SiteOpsState> {
+  const state = getAppState();
+  if (!state.sites.some(site => site.id === siteId)) throw new Error('You do not have access to that project.');
+  currentState = { ...state, activeSiteId: siteId };
+  notifyListeners();
+  return initializeAppStateFromSupabase(true);
+}
+
+export function setAuthenticatedUser(user: AppUser | null) {
+  currentState = { ...getAppState(), currentUser: user };
+  notifyListeners();
+}
+
+export function resetAppState() {
+  currentState = getInitialDefaultState();
+  initializationPromise = null;
+  initializationGeneration += 1;
+  notifyListeners();
 }
 
 export const DEFAULT_SAMPLE_REPORT: DailyProgressReport = {
@@ -138,64 +144,98 @@ export const DEFAULT_SAMPLE_REPORT: DailyProgressReport = {
 
 function getInitialDefaultState(): SiteOpsState {
   return {
-    sites: INITIAL_SITES,
+    sites: [],
     contractorsMaster: INITIAL_CONTRACTORS_MASTER,
-    materialCategories: INITIAL_MATERIAL_CATEGORIES,
+    materialCategories: [],
     suppliers: [],
     materialInward: [],
     materialIssued: [],
     materialWastage: [],
-    expenseCategories: INITIAL_EXPENSE_CATEGORIES,
+    expenseCategories: [],
     expenses: [],
     fundRequisitions: [],
-    equipmentTypes: INITIAL_EQUIPMENT_TYPES,
+    equipmentTypes: [],
     equipment: [],
     equipmentUsage: [],
     equipmentPayments: [],
     visitors: [],
     meetings: [],
     sitePhotos: [],
-    safetyCheckItems: INITIAL_SAFETY_CHECK_ITEMS,
+    safetyCheckItems: [],
     safetyChecklists: [],
     safetyIncidents: [],
     ppeIssuance: [],
     cubeTests: [],
     materialTests: [],
     ncrReports: [],
-    dailyReports: [DEFAULT_SAMPLE_REPORT],
+    dailyReports: [],
     contractorShifts: [],
     contractorMaterialAllocations: [],
     materialDamageDeductions: [],
-    activeSiteId: 1,
-    currentUser: {
-      id: 1,
-      username: 'admin',
-      name: 'Site Manager',
-      role: 'admin',
-      email: 'admin@siteops.com'
-    }
+    activeSiteId: null,
+    currentUser: null
   };
 }
 
-export function saveAppState(newState: Partial<SiteOpsState>) {
+export function saveAppState(newState: Partial<SiteOpsState>): Promise<SupabaseSaveResult> {
   const current = getAppState();
   const cleanedNewState: Partial<SiteOpsState> = {};
+  const changedRecords: Partial<Record<PersistedStateKey, any[]>> = {};
+  const deletedIds: Partial<Record<PersistedStateKey, Array<string | number>>> = {};
   
   // Exclude undefined keys from merging
   for (const key of Object.keys(newState) as Array<keyof SiteOpsState>) {
     if (newState[key] !== undefined) {
       (cleanedNewState as any)[key] = newState[key];
+      const previousValue = current[key];
+      const nextValue = newState[key];
+      if (Array.isArray(previousValue) && Array.isArray(nextValue)) {
+        const previousById = new Map(previousValue.map(item => [item?.id, item]));
+        const changed = nextValue.filter(item => {
+          const previous = previousById.get(item?.id);
+          return !previous || JSON.stringify(previous) !== JSON.stringify(item);
+        });
+        if (changed.length > 0) {
+          changedRecords[key as PersistedStateKey] = changed;
+        }
+        const nextIds = new Set(nextValue.map(item => item?.id));
+        const removed = previousValue
+          .map(item => item?.id)
+          .filter((id): id is number => typeof id === 'number' && !nextIds.has(id));
+        if (removed.length > 0) {
+          deletedIds[key as PersistedStateKey] = removed;
+        }
+      }
     }
   }
 
   currentState = { ...current, ...cleanedNewState };
-
-  // Direct save & sync to Supabase Postgres Cloud
-  saveStateToSupabase(cleanedNewState).catch(e =>
-    console.error('[SiteOps Storage] Direct Supabase save error:', e)
-  );
-
   notifyListeners();
+
+  if (Object.keys(changedRecords).length === 0 && Object.keys(deletedIds).length === 0) {
+    return Promise.resolve({ success: true, skipped: true, errors: [] });
+  }
+
+  const activeSiteId = currentState.activeSiteId;
+  const operation = saveQueue.then(() => saveStateToSupabase(changedRecords, deletedIds, activeSiteId));
+  saveQueue = operation.then(() => undefined, () => undefined);
+
+  return operation.then(result => {
+    if (!result.success) {
+      console.error('[SiteOps Storage] Supabase save failed:', result.errors);
+      const latest = getAppState();
+      const rollback: Partial<SiteOpsState> = {};
+      for (const key of Object.keys(cleanedNewState) as Array<keyof SiteOpsState>) {
+        if (latest[key] === cleanedNewState[key]) (rollback as any)[key] = current[key];
+      }
+      currentState = { ...latest, ...rollback };
+      notifyListeners();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('siteops:save-error', { detail: result.errors }));
+      }
+    }
+    return result;
+  });
 }
 
 export function subscribeState(fn: () => void) {
@@ -337,7 +377,7 @@ ${cementLines}
 ✅ *Reported via ConstructTrack SiteOps*`;
 }
 
-export function saveDailyReport(report: DailyProgressReport) {
+export function saveDailyReport(report: DailyProgressReport): Promise<SupabaseSaveResult> {
   const state = getAppState();
   const existingIdx = state.dailyReports.findIndex(r => r.id === report.id || r.reportDate === report.reportDate);
   
@@ -350,20 +390,67 @@ export function saveDailyReport(report: DailyProgressReport) {
     updatedReports = [{ ...report, id: newId }, ...state.dailyReports];
   }
   
-  saveAppState({ dailyReports: updatedReports });
+  return saveAppState({ dailyReports: updatedReports });
 }
 
-export function deleteDailyReport(id: number) {
+export function deleteDailyReport(id: number): Promise<SupabaseSaveResult> {
   const state = getAppState();
   const updatedReports = state.dailyReports.filter(r => r.id !== id);
-  saveAppState({ dailyReports: updatedReports });
+  return saveAppState({ dailyReports: updatedReports });
 }
 
 // ==========================================
 // MASTER DATA MANAGEMENT HELPERS
 // ==========================================
 
-export function saveContractor(contractor: ContractorMaster) {
+export async function saveSite(site: Site): Promise<SupabaseSaveResult> {
+  const state = getAppState();
+  const previousState = state;
+  const existingIndex = state.sites.findIndex(item => item.id === site.id);
+  const now = new Date().toISOString();
+  let updatedSites: Site[];
+
+  if (existingIndex > -1) {
+    updatedSites = [...state.sites];
+    updatedSites[existingIndex] = {
+      ...state.sites[existingIndex],
+      ...site,
+      updatedAt: now,
+    };
+  } else {
+    const newId = state.sites.length > 0 ? Math.max(...state.sites.map(item => item.id)) + 1 : 1;
+    updatedSites = [{ ...site, id: newId, createdAt: now, updatedAt: now }, ...state.sites];
+  }
+
+  const result = await saveAppState({
+    sites: updatedSites,
+    activeSiteId: state.activeSiteId ?? updatedSites[0]?.id ?? null,
+  });
+
+  if (!result.success) {
+    currentState = previousState;
+    notifyListeners();
+  }
+  return result;
+}
+
+export async function deleteSite(id: number): Promise<SupabaseSaveResult> {
+  const state = getAppState();
+  const previousState = state;
+  const updatedSites = state.sites.filter(site => site.id !== id);
+  const activeSiteId = state.activeSiteId === id
+    ? updatedSites[0]?.id ?? null
+    : state.activeSiteId;
+  const result = await saveAppState({ sites: updatedSites, activeSiteId });
+
+  if (!result.success) {
+    currentState = previousState;
+    notifyListeners();
+  }
+  return result;
+}
+
+export function saveContractor(contractor: ContractorMaster): Promise<SupabaseSaveResult> {
   const state = getAppState();
   const existingIdx = state.contractorsMaster.findIndex(c => c.id === contractor.id);
   
@@ -376,16 +463,16 @@ export function saveContractor(contractor: ContractorMaster) {
     updated = [{ ...contractor, id: newId }, ...state.contractorsMaster];
   }
   
-  saveAppState({ contractorsMaster: updated });
+  return saveAppState({ contractorsMaster: updated });
 }
 
-export function deleteContractor(id: number) {
+export function deleteContractor(id: number): Promise<SupabaseSaveResult> {
   const state = getAppState();
   const updated = state.contractorsMaster.filter(c => c.id !== id);
-  saveAppState({ contractorsMaster: updated });
+  return saveAppState({ contractorsMaster: updated });
 }
 
-export function saveMaterialCategory(cat: MaterialCategory) {
+export function saveMaterialCategory(cat: MaterialCategory): Promise<SupabaseSaveResult> {
   const state = getAppState();
   const existingIdx = state.materialCategories.findIndex(c => c.id === cat.id);
   let updated: MaterialCategory[];
@@ -396,16 +483,16 @@ export function saveMaterialCategory(cat: MaterialCategory) {
     const newId = state.materialCategories.length > 0 ? Math.max(...state.materialCategories.map(c => c.id)) + 1 : 1;
     updated = [{ ...cat, id: newId }, ...state.materialCategories];
   }
-  saveAppState({ materialCategories: updated });
+  return saveAppState({ materialCategories: updated });
 }
 
-export function deleteMaterialCategory(id: number) {
+export function deleteMaterialCategory(id: number): Promise<SupabaseSaveResult> {
   const state = getAppState();
   const updated = state.materialCategories.filter(c => c.id !== id);
-  saveAppState({ materialCategories: updated });
+  return saveAppState({ materialCategories: updated });
 }
 
-export function saveExpenseCategory(cat: ExpenseCategory) {
+export function saveExpenseCategory(cat: ExpenseCategory): Promise<SupabaseSaveResult> {
   const state = getAppState();
   const existingIdx = state.expenseCategories.findIndex(c => c.id === cat.id);
   let updated: ExpenseCategory[];
@@ -416,16 +503,16 @@ export function saveExpenseCategory(cat: ExpenseCategory) {
     const newId = state.expenseCategories.length > 0 ? Math.max(...state.expenseCategories.map(c => c.id)) + 1 : 1;
     updated = [{ ...cat, id: newId }, ...state.expenseCategories];
   }
-  saveAppState({ expenseCategories: updated });
+  return saveAppState({ expenseCategories: updated });
 }
 
-export function deleteExpenseCategory(id: number) {
+export function deleteExpenseCategory(id: number): Promise<SupabaseSaveResult> {
   const state = getAppState();
   const updated = state.expenseCategories.filter(c => c.id !== id);
-  saveAppState({ expenseCategories: updated });
+  return saveAppState({ expenseCategories: updated });
 }
 
-export function saveEquipmentType(eq: EquipmentTypeMaster) {
+export function saveEquipmentType(eq: EquipmentTypeMaster): Promise<SupabaseSaveResult> {
   const state = getAppState();
   const existingIdx = state.equipmentTypes.findIndex(e => e.id === eq.id);
   let updated: EquipmentTypeMaster[];
@@ -436,16 +523,16 @@ export function saveEquipmentType(eq: EquipmentTypeMaster) {
     const newId = state.equipmentTypes.length > 0 ? Math.max(...state.equipmentTypes.map(e => e.id)) + 1 : 1;
     updated = [{ ...eq, id: newId }, ...state.equipmentTypes];
   }
-  saveAppState({ equipmentTypes: updated });
+  return saveAppState({ equipmentTypes: updated });
 }
 
-export function deleteEquipmentType(id: number) {
+export function deleteEquipmentType(id: number): Promise<SupabaseSaveResult> {
   const state = getAppState();
   const updated = state.equipmentTypes.filter(e => e.id !== id);
-  saveAppState({ equipmentTypes: updated });
+  return saveAppState({ equipmentTypes: updated });
 }
 
-export function saveSupplier(supplier: Supplier) {
+export function saveSupplier(supplier: Supplier): Promise<SupabaseSaveResult> {
   const state = getAppState();
   const existingIdx = state.suppliers.findIndex(s => s.id === supplier.id);
   let updated: Supplier[];
@@ -456,28 +543,47 @@ export function saveSupplier(supplier: Supplier) {
     const newId = state.suppliers.length > 0 ? Math.max(...state.suppliers.map(s => s.id)) + 1 : 1;
     updated = [{ ...supplier, id: newId }, ...state.suppliers];
   }
-  saveAppState({ suppliers: updated });
+  return saveAppState({ suppliers: updated });
 }
 
-export function deleteSupplier(id: number) {
+export function deleteSupplier(id: number): Promise<SupabaseSaveResult> {
   const state = getAppState();
   const updated = state.suppliers.filter(s => s.id !== id);
-  saveAppState({ suppliers: updated });
+  return saveAppState({ suppliers: updated });
 }
 
 export function exportDatabaseBackup(): string {
   const state = getAppState();
-  return JSON.stringify(state, null, 2);
+  const { currentUser: _currentUser, sites, activeSiteId, ...projectData } = state;
+  return JSON.stringify({
+    format: 'constructtrack-siteops',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    project: sites.find(site => site.id === activeSiteId) ?? null,
+    data: projectData,
+  }, null, 2);
 }
 
-export function importDatabaseBackup(jsonContent: string): boolean {
+export async function importDatabaseBackup(jsonContent: string): Promise<boolean> {
   try {
     const parsed = JSON.parse(jsonContent);
-    if (typeof parsed === 'object' && parsed !== null) {
-      saveAppState(parsed);
-      return true;
+    if (parsed?.format !== 'constructtrack-siteops' || parsed?.version !== 1 || typeof parsed.data !== 'object' || parsed.data === null) return false;
+    const allowedKeys = new Set<PersistedStateKey>([
+      'contractorsMaster', 'materialCategories', 'suppliers', 'materialInward', 'materialIssued',
+      'materialWastage', 'expenseCategories', 'expenses', 'fundRequisitions', 'equipmentTypes',
+      'equipment', 'equipmentUsage', 'equipmentPayments', 'visitors', 'meetings', 'sitePhotos',
+      'safetyCheckItems', 'safetyChecklists', 'safetyIncidents', 'ppeIssuance', 'cubeTests',
+      'materialTests', 'ncrReports', 'dailyReports', 'contractorShifts',
+      'contractorMaterialAllocations', 'materialDamageDeductions',
+    ]);
+    const safeData: Partial<SiteOpsState> = {};
+    for (const [key, value] of Object.entries(parsed.data)) {
+      if (!allowedKeys.has(key as PersistedStateKey) || !Array.isArray(value) || value.length > 10_000) return false;
+      if (!value.every(item => item && typeof item === 'object' && Number.isSafeInteger(item.id) && item.id > 0)) return false;
+      (safeData as any)[key] = value;
     }
-    return false;
+    const result = await saveAppState(safeData);
+    return result.success;
   } catch (err) {
     console.error('Failed to import database backup', err);
     return false;
@@ -488,40 +594,33 @@ export function importDatabaseBackup(jsonContent: string): boolean {
 // CROSS-MODULE AUTOMATION HELPERS
 // ==========================================
 
-export function autoCreateDraftNcrFromMaterialInward(inward: MaterialInward) {
-  const state = getAppState();
-  const newNcr: NCRReport = {
-    id: Date.now(),
+export function buildDraftNcrFromMaterialInward(inward: MaterialInward): NCRReport {
+  return {
+    id: createLocalId(),
     location: inward.supplierName ? `GRN Inward - ${inward.supplierName}` : 'Material Receiving Bay',
-    description: `[DRAFT NCR - QC Failed] ${inward.itemName} (${inward.quantityReceived} ${inward.unit}). Notes: ${inward.qualityNotes || 'Rejected during receiving inspection.'}`,
+    description: `${inward.itemName} (${inward.quantityReceived} ${inward.unit}) failed receiving inspection. Notes: ${inward.qualityNotes || 'Rejected during receiving inspection.'}`,
     assignedTo: inward.receivedBy || 'Quality Inspector',
     status: 'OPEN',
     createdAt: new Date().toISOString(),
+    sourceMaterialInwardId: inward.id,
   };
-
-  saveAppState({
-    ncrReports: [newNcr, ...(state.ncrReports || [])],
-  });
 }
 
-export function createDraftExpenseFromMachineryPayment(payment: EquipmentPayment, equipmentName?: string) {
-  const state = getAppState();
+export function buildDraftExpenseFromMachineryPayment(payment: EquipmentPayment, equipmentName?: string): Expense {
   let mappedMode: 'CASH' | 'UPI' | 'BANK_TRANSFER' | 'OTHER' = 'CASH';
   if (payment.paymentMode === 'BANK_TRANSFER') mappedMode = 'BANK_TRANSFER';
   else if (payment.paymentMode === 'CHEQUE') mappedMode = 'OTHER';
 
-  const newExpense: Expense = {
-    id: Date.now(),
+  return {
+    id: createLocalId(),
     category: 'Transport & Freight',
-    description: `[DRAFT Expense - Pending Approval] Machinery Payment for ${equipmentName || 'Equipment'}. Notes: ${payment.notes || 'Rental Payment'}`,
+    description: `Machinery payment for ${equipmentName || 'Equipment'}. Notes: ${payment.notes || 'Rental Payment'}`,
     amount: payment.amountPaid,
     paidTo: payment.notes || 'Equipment Vendor',
     paymentMode: mappedMode,
     receiptPhotoUrl: payment.receiptPhotoUrl,
     dateLogged: payment.paymentDate || new Date().toISOString().split('T')[0],
+    status: 'PENDING_APPROVAL',
+    sourceEquipmentPaymentId: payment.id,
   };
-
-  saveAppState({
-    expenses: [newExpense, ...(state.expenses || [])],
-  });
 }

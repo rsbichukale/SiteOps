@@ -8,178 +8,241 @@ function snakeToCamelKey(key: string): string {
   return key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
 }
 
-export function mapToSnakeCase(obj: any): any {
+export function mapToSnakeCase(obj: unknown): any {
   if (Array.isArray(obj)) return obj.map(mapToSnakeCase);
   if (obj !== null && typeof obj === 'object' && !(obj instanceof Date)) {
-    const n: any = {};
-    for (const k of Object.keys(obj)) {
-      n[camelToSnakeKey(k)] = mapToSnakeCase(obj[k]);
-    }
-    return n;
+    return Object.fromEntries(
+      Object.entries(obj).map(([key, value]) => [camelToSnakeKey(key), mapToSnakeCase(value)])
+    );
   }
   return obj;
 }
 
-export function mapToCamelCase(obj: any): any {
+export function mapToCamelCase(obj: unknown): any {
   if (Array.isArray(obj)) return obj.map(mapToCamelCase);
   if (obj !== null && typeof obj === 'object' && !(obj instanceof Date)) {
-    const n: any = {};
-    for (const k of Object.keys(obj)) {
-      n[snakeToCamelKey(k)] = mapToCamelCase(obj[k]);
-    }
-    return n;
+    return Object.fromEntries(
+      Object.entries(obj).map(([key, value]) => [snakeToCamelKey(key), mapToCamelCase(value)])
+    );
   }
   return obj;
 }
 
-export async function fetchStateFromSupabase() {
-  if (!isSupabaseConfigured || !supabase) return null;
-  try {
-    console.log('[SiteOps Sync] Fetching remote state from Supabase...');
-    const [
-      { data: sites },
-      { data: contractorsMaster },
-      { data: materialCategories },
-      { data: suppliers },
-      { data: materialInward },
-      { data: materialIssued },
-      { data: materialWastage },
-      { data: expenseCategories },
-      { data: expenses },
-      { data: fundRequisitions },
-      { data: equipmentTypes },
-      { data: equipment },
-      { data: equipmentUsage },
-      { data: equipmentPayments },
-      { data: visitors },
-      { data: meetings },
-      { data: sitePhotos },
-      { data: safetyCheckItems },
-      { data: safetyChecklists },
-      { data: safetyIncidents },
-      { data: ppeIssuance },
-      { data: cubeTests },
-      { data: materialTests },
-      { data: ncrReports },
-      { data: dailyReports },
-      { data: contractorShifts },
-      { data: contractorMaterialAllocations },
-      { data: materialDamageDeductions }
-    ] = await Promise.all([
-      supabase.from('sites').select('*'),
-      supabase.from('contractors_master').select('*'),
-      supabase.from('material_categories').select('*'),
-      supabase.from('suppliers').select('*'),
-      supabase.from('material_inward').select('*'),
-      supabase.from('material_issued').select('*'),
-      supabase.from('material_wastage').select('*'),
-      supabase.from('expense_categories').select('*'),
-      supabase.from('expenses').select('*'),
-      supabase.from('fund_requisitions').select('*'),
-      supabase.from('equipment_types').select('*'),
-      supabase.from('equipment').select('*'),
-      supabase.from('equipment_usage').select('*'),
-      supabase.from('equipment_payments').select('*'),
-      supabase.from('visitors').select('*'),
-      supabase.from('meetings').select('*'),
-      supabase.from('site_photos').select('*'),
-      supabase.from('safety_check_items').select('*'),
-      supabase.from('safety_checklists').select('*'),
-      supabase.from('safety_incidents').select('*'),
-      supabase.from('ppe_issuance').select('*'),
-      supabase.from('cube_tests').select('*'),
-      supabase.from('material_tests').select('*'),
-      supabase.from('ncr_reports').select('*'),
-      supabase.from('daily_progress_reports').select('*'),
-      supabase.from('contractor_shifts').select('*'),
-      supabase.from('contractor_material_allocations').select('*'),
-      supabase.from('material_damage_deductions').select('*'),
-    ]);
+const TABLES = {
+  sites: 'sites',
+  contractorsMaster: 'contractors_master',
+  materialCategories: 'material_categories',
+  suppliers: 'suppliers',
+  materialInward: 'material_inward',
+  materialIssued: 'material_issued',
+  materialWastage: 'material_wastage',
+  expenseCategories: 'expense_categories',
+  expenses: 'expenses',
+  fundRequisitions: 'fund_requisitions',
+  equipmentTypes: 'equipment_types',
+  equipment: 'equipment',
+  equipmentUsage: 'equipment_usage',
+  equipmentPayments: 'equipment_payments',
+  visitors: 'visitors',
+  meetings: 'meetings',
+  sitePhotos: 'site_photos',
+  safetyCheckItems: 'safety_check_items',
+  safetyChecklists: 'safety_checklists',
+  safetyIncidents: 'safety_incidents',
+  ppeIssuance: 'ppe_issuance',
+  cubeTests: 'cube_tests',
+  materialTests: 'material_tests',
+  ncrReports: 'ncr_reports',
+  dailyReports: 'daily_progress_reports',
+  contractorShifts: 'contractor_shifts',
+  contractorMaterialAllocations: 'contractor_material_allocations',
+  materialDamageDeductions: 'material_damage_deductions',
+} as const;
 
-    return {
-      sites: sites?.length ? mapToCamelCase(sites) : undefined,
-      contractorsMaster: contractorsMaster?.length ? mapToCamelCase(contractorsMaster) : undefined,
-      materialCategories: materialCategories?.length ? mapToCamelCase(materialCategories) : undefined,
-      suppliers: suppliers?.length ? mapToCamelCase(suppliers) : undefined,
-      materialInward: materialInward?.length ? mapToCamelCase(materialInward) : undefined,
-      materialIssued: materialIssued?.length ? mapToCamelCase(materialIssued) : undefined,
-      materialWastage: materialWastage?.length ? mapToCamelCase(materialWastage) : undefined,
-      expenseCategories: expenseCategories?.length ? mapToCamelCase(expenseCategories) : undefined,
-      expenses: expenses?.length ? mapToCamelCase(expenses) : undefined,
-      fundRequisitions: fundRequisitions?.length ? mapToCamelCase(fundRequisitions) : undefined,
-      equipmentTypes: equipmentTypes?.length ? mapToCamelCase(equipmentTypes) : undefined,
-      equipment: equipment?.length ? mapToCamelCase(equipment) : undefined,
-      equipmentUsage: equipmentUsage?.length ? mapToCamelCase(equipmentUsage) : undefined,
-      equipmentPayments: equipmentPayments?.length ? mapToCamelCase(equipmentPayments) : undefined,
-      visitors: visitors?.length ? mapToCamelCase(visitors) : undefined,
-      meetings: meetings?.length ? mapToCamelCase(meetings) : undefined,
-      sitePhotos: sitePhotos?.length ? mapToCamelCase(sitePhotos) : undefined,
-      safetyCheckItems: safetyCheckItems?.length ? mapToCamelCase(safetyCheckItems) : undefined,
-      safetyChecklists: safetyChecklists?.length ? mapToCamelCase(safetyChecklists) : undefined,
-      safetyIncidents: safetyIncidents?.length ? mapToCamelCase(safetyIncidents) : undefined,
-      ppeIssuance: ppeIssuance?.length ? mapToCamelCase(ppeIssuance) : undefined,
-      cubeTests: cubeTests?.length ? mapToCamelCase(cubeTests) : undefined,
-      materialTests: materialTests?.length ? mapToCamelCase(materialTests) : undefined,
-      ncrReports: ncrReports?.length ? mapToCamelCase(ncrReports) : undefined,
-      dailyReports: dailyReports?.length ? mapToCamelCase(dailyReports) : undefined,
-      contractorShifts: contractorShifts?.length ? mapToCamelCase(contractorShifts) : undefined,
-      contractorMaterialAllocations: contractorMaterialAllocations?.length ? mapToCamelCase(contractorMaterialAllocations) : undefined,
-      materialDamageDeductions: materialDamageDeductions?.length ? mapToCamelCase(materialDamageDeductions) : undefined,
-    };
-  } catch (err) {
-    console.error('[SiteOps Sync] Error fetching state from Supabase:', err);
-    return null;
-  }
+export type PersistedStateKey = keyof typeof TABLES;
+
+const PROJECT_SCOPED_KEYS = (Object.keys(TABLES) as PersistedStateKey[])
+  .filter(key => key !== 'sites');
+
+export interface SupabaseSaveResult {
+  success: boolean;
+  skipped: boolean;
+  errors: Array<{ stateKey: string; table: string; message: string }>;
 }
 
-export async function saveStateToSupabase(partialState: Record<string, any>) {
-  if (!isSupabaseConfigured || !supabase) return;
+export interface SupabaseFetchResult {
+  state: Partial<Record<PersistedStateKey, any[]>>;
+  activeSiteId: number | null;
+}
 
-  const keyToTableMap: Record<string, string> = {
-    sites: 'sites',
-    contractorsMaster: 'contractors_master',
-    materialCategories: 'material_categories',
-    suppliers: 'suppliers',
-    materialInward: 'material_inward',
-    materialIssued: 'material_issued',
-    materialWastage: 'material_wastage',
-    expenseCategories: 'expense_categories',
-    expenses: 'expenses',
-    fundRequisitions: 'fund_requisitions',
-    equipmentTypes: 'equipment_types',
-    equipment: 'equipment',
-    equipmentUsage: 'equipment_usage',
-    equipmentPayments: 'equipment_payments',
-    visitors: 'visitors',
-    meetings: 'meetings',
-    sitePhotos: 'site_photos',
-    safetyCheckItems: 'safety_check_items',
-    safetyChecklists: 'safety_checklists',
-    safetyIncidents: 'safety_incidents',
-    ppeIssuance: 'ppe_issuance',
-    cubeTests: 'cube_tests',
-    materialTests: 'material_tests',
-    ncrReports: 'ncr_reports',
-    dailyReports: 'daily_progress_reports',
-    contractorShifts: 'contractor_shifts',
-    contractorMaterialAllocations: 'contractor_material_allocations',
-    materialDamageDeductions: 'material_damage_deductions',
-  };
+async function requireAuthenticatedUser() {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error('Supabase environment variables are not configured.');
+  }
 
-  for (const [stateKey, items] of Object.entries(partialState)) {
-    const tableName = keyToTableMap[stateKey];
-    if (tableName && Array.isArray(items) && items.length > 0) {
-      try {
-        const payload = mapToSnakeCase(items);
-        const { error } = await supabase.from(tableName).upsert(payload, { onConflict: 'id' });
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) {
+    throw new Error('Sign in is required before SiteOps data can be accessed.');
+  }
+
+  return data.user;
+}
+
+export async function fetchStateFromSupabase(
+  preferredSiteId: number | null = null
+): Promise<SupabaseFetchResult | null> {
+  if (!isSupabaseConfigured || !supabase) return null;
+  await requireAuthenticatedUser();
+  const client = supabase;
+
+  const { data: rawSites, error: sitesError } = await client
+    .from(TABLES.sites)
+    .select('*')
+    .order('id', { ascending: true });
+
+  if (sitesError) {
+    throw new Error(`Supabase load failed. sites: ${sitesError.message}`);
+  }
+
+  const sites = mapToCamelCase(rawSites ?? []);
+  const activeSiteId = sites.some((site: { id: number }) => site.id === preferredSiteId)
+    ? preferredSiteId
+    : sites[0]?.id ?? null;
+
+  const state: Partial<Record<PersistedStateKey, any[]>> = { sites };
+  if (activeSiteId === null) return { state, activeSiteId };
+
+  const results = await Promise.all(
+    PROJECT_SCOPED_KEYS.map(async stateKey => {
+      const table = TABLES[stateKey];
+      const { data, error } = await client
+        .from(table)
+        .select('*')
+        .eq('site_id', activeSiteId)
+        .order('id', { ascending: false });
+      return { stateKey, table, data, error };
+    })
+  );
+
+  const failures = results.filter(result => result.error);
+  if (failures.length > 0) {
+    const detail = failures
+      .map(({ table, error }) => `${table}: ${error?.message}${error?.hint ? ` (${error.hint})` : ''}`)
+      .join('; ');
+    throw new Error(`Supabase load failed. ${detail}`);
+  }
+
+  for (const { stateKey, data } of results) {
+    state[stateKey] = mapToCamelCase(data ?? []);
+  }
+
+  return { state, activeSiteId };
+}
+
+export async function saveStateToSupabase(
+  partialState: Record<string, unknown>,
+  deletedIds: Partial<Record<PersistedStateKey, Array<string | number>>> = {},
+  activeSiteId: number | null = null
+): Promise<SupabaseSaveResult> {
+  if (!isSupabaseConfigured || !supabase) {
+    return {
+      success: false,
+      skipped: true,
+      errors: [{ stateKey: 'configuration', table: '-', message: 'Supabase environment variables are not configured.' }],
+    };
+  }
+
+  try {
+    await requireAuthenticatedUser();
+  } catch (error) {
+    return {
+      success: false,
+      skipped: false,
+      errors: [{ stateKey: 'authentication', table: '-', message: error instanceof Error ? error.message : String(error) }],
+    };
+  }
+
+  const errors: SupabaseSaveResult['errors'] = [];
+  const pendingState: Record<string, unknown> = Object.fromEntries(
+    Object.entries(partialState).map(([key, value]) => [key, Array.isArray(value) ? [...value] : value])
+  );
+
+  if (activeSiteId !== null) {
+    const atomicPairs = [
+      {
+        firstKey: 'equipmentPayments', secondKey: 'expenses', sourceKey: 'sourceEquipmentPaymentId',
+        rpc: 'save_machinery_payment_with_expense', firstArg: 'p_payment', secondArg: 'p_expense',
+      },
+      {
+        firstKey: 'materialInward', secondKey: 'ncrReports', sourceKey: 'sourceMaterialInwardId',
+        rpc: 'save_material_inward_with_ncr', firstArg: 'p_inward', secondArg: 'p_ncr',
+      },
+      {
+        firstKey: 'materialIssued', secondKey: 'contractorMaterialAllocations', sourceKey: 'sourceMaterialIssueId',
+        rpc: 'save_material_issue_with_allocation', firstArg: 'p_issue', secondArg: 'p_allocation',
+      },
+    ] as const;
+
+    for (const pair of atomicPairs) {
+      const firstItems = Array.isArray(pendingState[pair.firstKey])
+        ? pendingState[pair.firstKey] as Array<Record<string, unknown>> : [];
+      const secondItems = Array.isArray(pendingState[pair.secondKey])
+        ? pendingState[pair.secondKey] as Array<Record<string, unknown>> : [];
+
+      for (const first of [...firstItems]) {
+        const second = secondItems.find(item => item[pair.sourceKey] === first.id);
+        if (!second) continue;
+        const { error } = await supabase.rpc(pair.rpc, {
+          p_site_id: activeSiteId,
+          [pair.firstArg]: mapToSnakeCase(first),
+          [pair.secondArg]: mapToSnakeCase(second),
+        });
         if (error) {
-          console.error(`[Supabase Sync] Direct save error for ${tableName}:`, error.message);
-        } else {
-          console.log(`[Supabase Sync] Successfully saved ${items.length} records to table '${tableName}'`);
+          return { success: false, skipped: false, errors: [{ stateKey: `${pair.firstKey},${pair.secondKey}`, table: pair.rpc, message: error.message }] };
         }
-      } catch (err) {
-        console.error(`[Supabase Sync] Exception saving to ${tableName}:`, err);
+        pendingState[pair.firstKey] = (pendingState[pair.firstKey] as Array<Record<string, unknown>>).filter(item => item.id !== first.id);
+        pendingState[pair.secondKey] = (pendingState[pair.secondKey] as Array<Record<string, unknown>>).filter(item => item.id !== second.id);
       }
     }
   }
+
+  const stateKeys = new Set<PersistedStateKey>();
+  for (const key of Object.keys(pendingState)) {
+    if (key in TABLES) stateKeys.add(key as PersistedStateKey);
+  }
+  for (const key of Object.keys(deletedIds)) stateKeys.add(key as PersistedStateKey);
+
+  for (const stateKey of Array.from(stateKeys)) {
+    const table = TABLES[stateKey];
+    const isProjectScoped = stateKey !== 'sites';
+    if (isProjectScoped && activeSiteId === null) {
+      errors.push({ stateKey, table, message: 'Select a project before saving operational data.' });
+      continue;
+    }
+
+    const value = pendingState[stateKey];
+    const items = Array.isArray(value) ? value as Array<Record<string, unknown>> : [];
+    if (items.length > 0) {
+      const payload = mapToSnakeCase(
+        isProjectScoped
+          ? items.map(item => ({ ...item, siteId: activeSiteId }))
+          : items
+      );
+      const { error } = await supabase.from(table).upsert(payload, { onConflict: 'id' });
+      if (error) {
+        errors.push({ stateKey, table, message: error.message });
+        continue;
+      }
+    }
+
+    const idsToDelete = deletedIds[stateKey] ?? [];
+    if (idsToDelete.length > 0) {
+      let deleteQuery = supabase.from(table).delete().in('id', idsToDelete);
+      if (isProjectScoped) deleteQuery = deleteQuery.eq('site_id', activeSiteId!);
+      const { error } = await deleteQuery;
+      if (error) errors.push({ stateKey, table, message: error.message });
+    }
+  }
+
+  return { success: errors.length === 0, skipped: false, errors };
 }

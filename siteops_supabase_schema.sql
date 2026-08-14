@@ -10,7 +10,15 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS sites (
     id SERIAL PRIMARY KEY,
     name VARCHAR(150) NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    code VARCHAR(50),
+    location VARCHAR(250),
+    client_name VARCHAR(150),
+    description TEXT,
+    start_date DATE,
+    target_end_date DATE,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 2. Material Categories Master
@@ -265,8 +273,8 @@ CREATE TABLE IF NOT EXISTS cube_tests (
     grade VARCHAR(10) NOT NULL,
     location VARCHAR(200) NOT NULL,
     num_cubes INT DEFAULT 6,
-    result_7day NUMERIC(8,2),
-    result_28day NUMERIC(8,2),
+    result7_day NUMERIC(8,2),
+    result28_day NUMERIC(8,2),
     status VARCHAR(10) DEFAULT 'PENDING',
     lab_name VARCHAR(100),
     report_photo_url TEXT,
@@ -300,7 +308,8 @@ CREATE TABLE IF NOT EXISTS ncr_reports (
     closed_at TIMESTAMPTZ
 );
 
--- RLS Enable & Permissive Public Access Policies
+-- RLS is enabled immediately. Policies are installed by the project-isolation
+-- upgrade below; there is intentionally no anonymous fallback policy.
 ALTER TABLE sites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE material_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE suppliers ENABLE ROW LEVEL SECURITY;
@@ -324,75 +333,6 @@ ALTER TABLE ppe_issuance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cube_tests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE material_tests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ncr_reports ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Allow public read-write sites" ON sites;
-CREATE POLICY "Allow public read-write sites" ON sites FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write material_categories" ON material_categories;
-CREATE POLICY "Allow public read-write material_categories" ON material_categories FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write suppliers" ON suppliers;
-CREATE POLICY "Allow public read-write suppliers" ON suppliers FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write material_inward" ON material_inward;
-CREATE POLICY "Allow public read-write material_inward" ON material_inward FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write material_issued" ON material_issued;
-CREATE POLICY "Allow public read-write material_issued" ON material_issued FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write material_wastage" ON material_wastage;
-CREATE POLICY "Allow public read-write material_wastage" ON material_wastage FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write expense_categories" ON expense_categories;
-CREATE POLICY "Allow public read-write expense_categories" ON expense_categories FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write expenses" ON expenses;
-CREATE POLICY "Allow public read-write expenses" ON expenses FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write fund_requisitions" ON fund_requisitions;
-CREATE POLICY "Allow public read-write fund_requisitions" ON fund_requisitions FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write equipment_types" ON equipment_types;
-CREATE POLICY "Allow public read-write equipment_types" ON equipment_types FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write equipment" ON equipment;
-CREATE POLICY "Allow public read-write equipment" ON equipment FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write equipment_usage" ON equipment_usage;
-CREATE POLICY "Allow public read-write equipment_usage" ON equipment_usage FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write equipment_payments" ON equipment_payments;
-CREATE POLICY "Allow public read-write equipment_payments" ON equipment_payments FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write visitors" ON visitors;
-CREATE POLICY "Allow public read-write visitors" ON visitors FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write meetings" ON meetings;
-CREATE POLICY "Allow public read-write meetings" ON meetings FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write site_photos" ON site_photos;
-CREATE POLICY "Allow public read-write site_photos" ON site_photos FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write safety_check_items" ON safety_check_items;
-CREATE POLICY "Allow public read-write safety_check_items" ON safety_check_items FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write safety_checklists" ON safety_checklists;
-CREATE POLICY "Allow public read-write safety_checklists" ON safety_checklists FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write safety_incidents" ON safety_incidents;
-CREATE POLICY "Allow public read-write safety_incidents" ON safety_incidents FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write ppe_issuance" ON ppe_issuance;
-CREATE POLICY "Allow public read-write ppe_issuance" ON ppe_issuance FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write cube_tests" ON cube_tests;
-CREATE POLICY "Allow public read-write cube_tests" ON cube_tests FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write material_tests" ON material_tests;
-CREATE POLICY "Allow public read-write material_tests" ON material_tests FOR ALL USING (true);
-
-DROP POLICY IF EXISTS "Allow public read-write ncr_reports" ON ncr_reports;
-CREATE POLICY "Allow public read-write ncr_reports" ON ncr_reports FOR ALL USING (true);
 
 CREATE TABLE IF NOT EXISTS daily_progress_reports (
     id SERIAL PRIMARY KEY,
@@ -434,8 +374,6 @@ CREATE TABLE IF NOT EXISTS daily_progress_reports (
 );
 
 ALTER TABLE daily_progress_reports ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public read-write daily_progress_reports" ON daily_progress_reports;
-CREATE POLICY "Allow public read-write daily_progress_reports" ON daily_progress_reports FOR ALL USING (true);
 
 -- 25. Contractors Master
 CREATE TABLE IF NOT EXISTS contractors_master (
@@ -473,12 +411,16 @@ CREATE TABLE IF NOT EXISTS contractor_shifts (
 CREATE TABLE IF NOT EXISTS contractor_material_allocations (
     id SERIAL PRIMARY KEY,
     contractor_id INT REFERENCES contractors_master(id) ON DELETE CASCADE,
+    contractor_name VARCHAR(150),
     material_category_id INT REFERENCES material_categories(id) ON DELETE CASCADE,
-    quantity_allocated NUMERIC(12,2) NOT NULL,
+    item_name VARCHAR(200),
+    quantity_issued NUMERIC(12,2) NOT NULL,
     unit VARCHAR(20) NOT NULL,
-    date_allocated DATE DEFAULT CURRENT_DATE,
-    allocated_by VARCHAR(100),
-    notes TEXT
+    floor_location VARCHAR(200),
+    purpose TEXT,
+    issued_by VARCHAR(100),
+    date_issued DATE DEFAULT CURRENT_DATE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 28. Material Damage & Deductions
@@ -488,9 +430,11 @@ CREATE TABLE IF NOT EXISTS material_damage_deductions (
     contractor_name VARCHAR(150) NOT NULL,
     trade VARCHAR(100),
     material_name VARCHAR(200) NOT NULL,
-    damage_amount NUMERIC(12,2) NOT NULL,
-    description TEXT,
-    photos TEXT[],
+    quantity NUMERIC(12,2) DEFAULT 0,
+    unit VARCHAR(20),
+    deduction_amount NUMERIC(12,2) NOT NULL,
+    reason TEXT,
+    photo_url TEXT,
     date_logged DATE DEFAULT CURRENT_DATE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -500,17 +444,341 @@ ALTER TABLE contractor_shifts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE contractor_material_allocations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE material_damage_deductions ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Allow public read-write contractors_master" ON contractors_master;
-CREATE POLICY "Allow public read-write contractors_master" ON contractors_master FOR ALL USING (true);
+-- =========================================================================
+-- IDEMPOTENT UPGRADE: project persistence and app/database field alignment
+-- Required for databases where the CREATE TABLE IF NOT EXISTS statements above
+-- were run before these fields were added.
+-- =========================================================================
 
-DROP POLICY IF EXISTS "Allow public read-write contractor_shifts" ON contractor_shifts;
-CREATE POLICY "Allow public read-write contractor_shifts" ON contractor_shifts FOR ALL USING (true);
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS code VARCHAR(50);
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS location VARCHAR(250);
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS client_name VARCHAR(150);
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS start_date DATE;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS target_end_date DATE;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE';
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+CREATE UNIQUE INDEX IF NOT EXISTS sites_code_unique_idx ON sites (code) WHERE code IS NOT NULL;
 
-DROP POLICY IF EXISTS "Allow public read-write contractor_material_allocations" ON contractor_material_allocations;
-CREATE POLICY "Allow public read-write contractor_material_allocations" ON contractor_material_allocations FOR ALL USING (true);
+ALTER TABLE material_issued ADD COLUMN IF NOT EXISTS quantity_returned NUMERIC(12,2) DEFAULT 0;
+ALTER TABLE material_issued ADD COLUMN IF NOT EXISTS return_status VARCHAR(50) DEFAULT 'NOT_RETURNED';
+ALTER TABLE material_issued ADD COLUMN IF NOT EXISTS return_logs JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE material_issued ADD COLUMN IF NOT EXISTS contractor_id INT;
+ALTER TABLE material_issued ADD COLUMN IF NOT EXISTS contractor_name VARCHAR(150);
+ALTER TABLE material_issued ADD COLUMN IF NOT EXISTS location VARCHAR(200);
+ALTER TABLE material_issued ADD COLUMN IF NOT EXISTS engineer_remarks TEXT;
 
-DROP POLICY IF EXISTS "Allow public read-write material_damage_deductions" ON material_damage_deductions;
-CREATE POLICY "Allow public read-write material_damage_deductions" ON material_damage_deductions FOR ALL USING (true);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'cube_tests' AND column_name = 'result_7day')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'cube_tests' AND column_name = 'result7_day') THEN
+    ALTER TABLE cube_tests RENAME COLUMN result_7day TO result7_day;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'cube_tests' AND column_name = 'result_28day')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'cube_tests' AND column_name = 'result28_day') THEN
+    ALTER TABLE cube_tests RENAME COLUMN result_28day TO result28_day;
+  END IF;
 
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'contractor_material_allocations' AND column_name = 'quantity_allocated')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'contractor_material_allocations' AND column_name = 'quantity_issued') THEN
+    ALTER TABLE contractor_material_allocations RENAME COLUMN quantity_allocated TO quantity_issued;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'contractor_material_allocations' AND column_name = 'date_allocated')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'contractor_material_allocations' AND column_name = 'date_issued') THEN
+    ALTER TABLE contractor_material_allocations RENAME COLUMN date_allocated TO date_issued;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'contractor_material_allocations' AND column_name = 'allocated_by')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'contractor_material_allocations' AND column_name = 'issued_by') THEN
+    ALTER TABLE contractor_material_allocations RENAME COLUMN allocated_by TO issued_by;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'contractor_material_allocations' AND column_name = 'notes')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'contractor_material_allocations' AND column_name = 'purpose') THEN
+    ALTER TABLE contractor_material_allocations RENAME COLUMN notes TO purpose;
+  END IF;
 
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'material_damage_deductions' AND column_name = 'damage_amount')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'material_damage_deductions' AND column_name = 'deduction_amount') THEN
+    ALTER TABLE material_damage_deductions RENAME COLUMN damage_amount TO deduction_amount;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'material_damage_deductions' AND column_name = 'description')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'material_damage_deductions' AND column_name = 'reason') THEN
+    ALTER TABLE material_damage_deductions RENAME COLUMN description TO reason;
+  END IF;
+END $$;
 
+-- =========================================================================
+-- SECURITY AND PROJECT-ISOLATION UPGRADE
+-- Run this section after the base tables above. Existing operational rows are
+-- assigned automatically only when the database contains exactly one project.
+-- With multiple existing projects, assign site_id explicitly before users log in.
+-- =========================================================================
+
+CREATE SCHEMA IF NOT EXISTS private;
+REVOKE ALL ON SCHEMA private FROM PUBLIC, anon;
+GRANT USAGE ON SCHEMA private TO authenticated;
+
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES auth.users(id) DEFAULT auth.uid();
+
+CREATE TABLE IF NOT EXISTS site_members (
+    site_id INT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'supervisor' CHECK (role IN ('admin', 'engineer', 'supervisor')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (site_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS site_members_user_id_idx ON site_members(user_id);
+
+CREATE OR REPLACE FUNCTION private.is_site_member(p_site_id INT, p_roles TEXT[] DEFAULT NULL)
+RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+  SELECT (SELECT auth.uid()) IS NOT NULL AND EXISTS (
+    SELECT 1
+    FROM public.site_members membership
+    WHERE membership.site_id = p_site_id
+      AND membership.user_id = (SELECT auth.uid())
+      AND (p_roles IS NULL OR membership.role = ANY(p_roles))
+  );
+$$;
+REVOKE ALL ON FUNCTION private.is_site_member(INT, TEXT[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION private.is_site_member(INT, TEXT[]) TO authenticated;
+
+CREATE OR REPLACE FUNCTION private.add_site_owner()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF NEW.created_by IS NULL OR NEW.created_by <> (SELECT auth.uid()) THEN
+    RAISE EXCEPTION 'A project must be created by the signed-in user';
+  END IF;
+  INSERT INTO public.site_members(site_id, user_id, role)
+  VALUES (NEW.id, NEW.created_by, 'admin')
+  ON CONFLICT (site_id, user_id) DO NOTHING;
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.add_site_owner() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS add_site_owner_after_insert ON sites;
+CREATE TRIGGER add_site_owner_after_insert
+AFTER INSERT ON sites
+FOR EACH ROW EXECUTE FUNCTION private.add_site_owner();
+
+DO $$
+DECLARE
+  table_name TEXT;
+  operational_tables CONSTANT TEXT[] := ARRAY[
+    'contractors_master', 'material_categories', 'suppliers', 'material_inward',
+    'material_issued', 'material_wastage', 'expense_categories', 'expenses',
+    'fund_requisitions', 'equipment_types', 'equipment', 'equipment_usage',
+    'equipment_payments', 'visitors', 'meetings', 'site_photos',
+    'safety_check_items', 'safety_checklists', 'safety_incidents', 'ppe_issuance',
+    'cube_tests', 'material_tests', 'ncr_reports', 'daily_progress_reports',
+    'contractor_shifts', 'contractor_material_allocations', 'material_damage_deductions'
+  ];
+  only_site_id INT;
+BEGIN
+  SELECT CASE WHEN COUNT(*) = 1 THEN MIN(id) END INTO only_site_id FROM sites;
+
+  FOREACH table_name IN ARRAY operational_tables LOOP
+    EXECUTE format('ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS site_id INT REFERENCES public.sites(id) ON DELETE CASCADE', table_name);
+    EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON public.%I(site_id)', table_name || '_site_id_idx', table_name);
+    IF only_site_id IS NOT NULL THEN
+      EXECUTE format('UPDATE public.%I SET site_id = $1 WHERE site_id IS NULL', table_name) USING only_site_id;
+    END IF;
+  END LOOP;
+END $$;
+
+ALTER TABLE site_members ENABLE ROW LEVEL SECURITY;
+
+DO $$
+DECLARE
+  policy_record RECORD;
+  table_name TEXT;
+  operational_tables CONSTANT TEXT[] := ARRAY[
+    'contractors_master', 'material_categories', 'suppliers', 'material_inward',
+    'material_issued', 'material_wastage', 'expense_categories', 'expenses',
+    'fund_requisitions', 'equipment_types', 'equipment', 'equipment_usage',
+    'equipment_payments', 'visitors', 'meetings', 'site_photos',
+    'safety_check_items', 'safety_checklists', 'safety_incidents', 'ppe_issuance',
+    'cube_tests', 'material_tests', 'ncr_reports', 'daily_progress_reports',
+    'contractor_shifts', 'contractor_material_allocations', 'material_damage_deductions'
+  ];
+BEGIN
+  FOR policy_record IN
+    SELECT tablename, policyname FROM pg_policies
+    WHERE schemaname = 'public' AND (tablename = 'sites' OR tablename = 'site_members' OR tablename = ANY(operational_tables))
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', policy_record.policyname, policy_record.tablename);
+  END LOOP;
+
+  CREATE POLICY sites_select_member ON sites FOR SELECT TO authenticated
+    USING (private.is_site_member(id, NULL) OR created_by = (SELECT auth.uid()));
+  CREATE POLICY sites_insert_owner ON sites FOR INSERT TO authenticated
+    WITH CHECK (created_by = (SELECT auth.uid()));
+  CREATE POLICY sites_update_manager ON sites FOR UPDATE TO authenticated
+    USING (private.is_site_member(id, ARRAY['admin','engineer']))
+    WITH CHECK (private.is_site_member(id, ARRAY['admin','engineer']));
+  CREATE POLICY sites_delete_admin ON sites FOR DELETE TO authenticated
+    USING (private.is_site_member(id, ARRAY['admin']));
+
+  CREATE POLICY site_members_select ON site_members FOR SELECT TO authenticated
+    USING (user_id = (SELECT auth.uid()) OR private.is_site_member(site_id, ARRAY['admin']));
+  CREATE POLICY site_members_insert_admin ON site_members FOR INSERT TO authenticated
+    WITH CHECK (private.is_site_member(site_id, ARRAY['admin']));
+  CREATE POLICY site_members_update_admin ON site_members FOR UPDATE TO authenticated
+    USING (private.is_site_member(site_id, ARRAY['admin']))
+    WITH CHECK (private.is_site_member(site_id, ARRAY['admin']));
+  CREATE POLICY site_members_delete_admin ON site_members FOR DELETE TO authenticated
+    USING (private.is_site_member(site_id, ARRAY['admin']));
+
+  FOREACH table_name IN ARRAY operational_tables LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', table_name);
+    EXECUTE format(
+      'CREATE POLICY project_select ON public.%I FOR SELECT TO authenticated USING (private.is_site_member(site_id, NULL))',
+      table_name
+    );
+    EXECUTE format(
+      'CREATE POLICY project_insert ON public.%I FOR INSERT TO authenticated WITH CHECK (private.is_site_member(site_id, ARRAY[''admin'',''engineer'',''supervisor'']))',
+      table_name
+    );
+    EXECUTE format(
+      'CREATE POLICY project_update ON public.%I FOR UPDATE TO authenticated USING (private.is_site_member(site_id, ARRAY[''admin'',''engineer'',''supervisor''])) WITH CHECK (private.is_site_member(site_id, ARRAY[''admin'',''engineer'',''supervisor'']))',
+      table_name
+    );
+    EXECUTE format(
+      'CREATE POLICY project_delete ON public.%I FOR DELETE TO authenticated USING (private.is_site_member(site_id, ARRAY[''admin'',''engineer'']))',
+      table_name
+    );
+  END LOOP;
+END $$;
+
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON sites, site_members TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON
+  contractors_master, material_categories, suppliers, material_inward,
+  material_issued, material_wastage, expense_categories, expenses,
+  fund_requisitions, equipment_types, equipment, equipment_usage,
+  equipment_payments, visitors, meetings, site_photos, safety_check_items,
+  safety_checklists, safety_incidents, ppe_issuance, cube_tests, material_tests,
+  ncr_reports, daily_progress_reports, contractor_shifts,
+  contractor_material_allocations, material_damage_deductions
+TO authenticated;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM anon;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE USAGE, SELECT ON SEQUENCES FROM anon;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon;
+
+ALTER TABLE contractor_material_allocations ADD COLUMN IF NOT EXISTS contractor_name VARCHAR(150);
+ALTER TABLE contractor_material_allocations ADD COLUMN IF NOT EXISTS item_name VARCHAR(200);
+ALTER TABLE contractor_material_allocations ADD COLUMN IF NOT EXISTS floor_location VARCHAR(200);
+ALTER TABLE contractor_material_allocations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+ALTER TABLE material_damage_deductions ADD COLUMN IF NOT EXISTS quantity NUMERIC(12,2) DEFAULT 0;
+ALTER TABLE material_damage_deductions ADD COLUMN IF NOT EXISTS unit VARCHAR(20);
+ALTER TABLE material_damage_deductions ADD COLUMN IF NOT EXISTS photo_url TEXT;
+
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS status VARCHAR(30) NOT NULL DEFAULT 'APPROVED';
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS source_equipment_payment_id BIGINT;
+CREATE UNIQUE INDEX IF NOT EXISTS expenses_source_equipment_payment_unique
+  ON expenses(site_id, source_equipment_payment_id) WHERE source_equipment_payment_id IS NOT NULL;
+
+ALTER TABLE ncr_reports ADD COLUMN IF NOT EXISTS source_material_inward_id BIGINT;
+CREATE UNIQUE INDEX IF NOT EXISTS ncr_source_material_inward_unique
+  ON ncr_reports(site_id, source_material_inward_id) WHERE source_material_inward_id IS NOT NULL;
+
+ALTER TABLE contractor_material_allocations ADD COLUMN IF NOT EXISTS source_material_issue_id BIGINT;
+CREATE UNIQUE INDEX IF NOT EXISTS allocation_source_material_issue_unique
+  ON contractor_material_allocations(site_id, source_material_issue_id) WHERE source_material_issue_id IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION public.save_machinery_payment_with_expense(
+  p_site_id INT, p_payment JSONB, p_expense JSONB
+) RETURNS VOID
+LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF (p_expense->>'source_equipment_payment_id')::BIGINT IS DISTINCT FROM (p_payment->>'id')::BIGINT THEN
+    RAISE EXCEPTION 'Expense source does not match equipment payment';
+  END IF;
+  INSERT INTO public.equipment_payments
+    SELECT (jsonb_populate_record(NULL::public.equipment_payments, p_payment || jsonb_build_object('site_id', p_site_id))).*;
+  INSERT INTO public.expenses
+    SELECT (jsonb_populate_record(NULL::public.expenses, p_expense || jsonb_build_object('site_id', p_site_id))).*;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.save_material_inward_with_ncr(
+  p_site_id INT, p_inward JSONB, p_ncr JSONB
+) RETURNS VOID
+LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF (p_ncr->>'source_material_inward_id')::BIGINT IS DISTINCT FROM (p_inward->>'id')::BIGINT THEN
+    RAISE EXCEPTION 'NCR source does not match material inward';
+  END IF;
+  INSERT INTO public.material_inward
+    SELECT (jsonb_populate_record(NULL::public.material_inward, p_inward || jsonb_build_object('site_id', p_site_id))).*;
+  INSERT INTO public.ncr_reports
+    SELECT (jsonb_populate_record(NULL::public.ncr_reports, p_ncr || jsonb_build_object('site_id', p_site_id))).*;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.save_material_issue_with_allocation(
+  p_site_id INT, p_issue JSONB, p_allocation JSONB
+) RETURNS VOID
+LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF (p_allocation->>'source_material_issue_id')::BIGINT IS DISTINCT FROM (p_issue->>'id')::BIGINT THEN
+    RAISE EXCEPTION 'Allocation source does not match material issue';
+  END IF;
+  INSERT INTO public.material_issued
+    SELECT (jsonb_populate_record(NULL::public.material_issued, p_issue || jsonb_build_object('site_id', p_site_id))).*;
+  INSERT INTO public.contractor_material_allocations
+    SELECT (jsonb_populate_record(NULL::public.contractor_material_allocations, p_allocation || jsonb_build_object('site_id', p_site_id))).*;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.save_machinery_payment_with_expense(INT, JSONB, JSONB) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.save_material_inward_with_ncr(INT, JSONB, JSONB) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.save_material_issue_with_allocation(INT, JSONB, JSONB) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.save_machinery_payment_with_expense(INT, JSONB, JSONB) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.save_material_inward_with_ncr(INT, JSONB, JSONB) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.save_material_issue_with_allocation(INT, JSONB, JSONB) TO authenticated;
+
+-- Keep SERIAL/BIGSERIAL sequences ahead of rows inserted by seed scripts with
+-- explicit IDs. Without this, the next normal insert can collide with id = 1.
+DO $$
+DECLARE
+  id_column RECORD;
+  sequence_name TEXT;
+  maximum_id BIGINT;
+BEGIN
+  FOR id_column IN
+    SELECT table_schema, table_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND column_name = 'id'
+      AND column_default LIKE 'nextval(%'
+  LOOP
+    sequence_name := pg_get_serial_sequence(
+      format('%I.%I', id_column.table_schema, id_column.table_name),
+      'id'
+    );
+    IF sequence_name IS NOT NULL THEN
+      -- Several legacy tables use bigint IDs populated with Date.now(), while
+      -- their original SERIAL sequence still has a 32-bit ceiling.
+      EXECUTE format('ALTER SEQUENCE %s AS BIGINT', sequence_name::regclass);
+      EXECUTE format('SELECT COALESCE(MAX(id), 0) FROM %I.%I', id_column.table_schema, id_column.table_name)
+        INTO maximum_id;
+      PERFORM setval(sequence_name::regclass, GREATEST(maximum_id, 1), maximum_id > 0);
+    END IF;
+  END LOOP;
+END $$;

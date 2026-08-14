@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Package, Plus, Search, Filter, AlertTriangle, TrendingDown, ArrowDownRight,
   ArrowUpRight, Truck, CheckCircle2, XCircle, FileText, Camera, Calendar, User, DollarSign, RotateCcw, Undo2
 } from 'lucide-react';
 import { MaterialCategory, Supplier, MaterialInward, MaterialIssued, MaterialWastage, MaterialReturnLog } from '@/types';
-import { getAppState, saveAppState, getStockSummary, autoCreateDraftNcrFromMaterialInward } from '@/lib/dbState';
+import { getAppState, saveAppState, getStockSummary, buildDraftNcrFromMaterialInward } from '@/lib/dbState';
+import { createLocalId } from '@/lib/ids';
 
 import { useSiteOpsState } from '@/hooks/useSiteOpsState';
 
@@ -95,7 +96,7 @@ export const MaterialModule: React.FC = () => {
     issuedBy: state.currentUser?.name || 'Site Engineer',
   });
 
-  const handleAddIssue = (e: React.FormEvent) => {
+  const handleAddIssue = async (e: React.FormEvent) => {
     e.preventDefault();
     const qty = Number(issueForm.quantityIssued);
     if (!qty || qty <= 0) return;
@@ -124,7 +125,7 @@ export const MaterialModule: React.FC = () => {
       : finalContractorName;
 
     const newIssue: MaterialIssued = {
-      id: Date.now(),
+      id: createLocalId(),
       materialCategoryId: Number(issueForm.materialCategoryId),
       itemName: finalItemName,
       quantityIssued: qty,
@@ -138,9 +139,26 @@ export const MaterialModule: React.FC = () => {
       dateIssued: new Date().toISOString(),
     };
 
-    saveAppState({
+    const allocation = newIssue.contractorId ? {
+      id: createLocalId(),
+      contractorId: newIssue.contractorId,
+      contractorName: finalContractorName,
+      materialCategoryId: newIssue.materialCategoryId,
+      itemName: newIssue.itemName,
+      quantityIssued: newIssue.quantityIssued,
+      unit: newIssue.unit,
+      floorLocation: newIssue.location || '',
+      purpose: newIssue.engineerRemarks || newIssue.issuedTo,
+      issuedBy: newIssue.issuedBy || 'Site Engineer',
+      dateIssued: newIssue.dateIssued.slice(0, 10),
+      createdAt: new Date().toISOString(),
+      sourceMaterialIssueId: newIssue.id,
+    } : null;
+    const result = await saveAppState({
       materialIssued: [newIssue, ...state.materialIssued],
+      ...(allocation ? { contractorMaterialAllocations: [allocation, ...state.contractorMaterialAllocations] } : {}),
     });
+    if (!result.success) return;
 
     setIsIssueModalOpen(false);
     setIssueForm({
@@ -175,8 +193,23 @@ export const MaterialModule: React.FC = () => {
     notes: '',
   });
 
+  useEffect(() => {
+    const firstCategoryId = state.materialCategories[0]?.id;
+    if (firstCategoryId) {
+      if (!state.materialCategories.some(category => category.id === Number(inwardForm.materialCategoryId))) setInwardForm(previous => ({ ...previous, materialCategoryId: firstCategoryId }));
+      if (!state.materialCategories.some(category => category.id === Number(issueForm.materialCategoryId))) setIssueForm(previous => ({ ...previous, materialCategoryId: firstCategoryId }));
+      if (!state.materialCategories.some(category => category.id === Number(wastageForm.materialCategoryId))) setWastageForm(previous => ({ ...previous, materialCategoryId: firstCategoryId }));
+    }
+    const firstSupplierId = state.suppliers[0]?.id;
+    if (firstSupplierId && !state.suppliers.some(supplier => supplier.id === Number(inwardForm.supplierId))) setInwardForm(previous => ({ ...previous, supplierId: firstSupplierId }));
+    const firstContractor = state.contractorsMaster[0];
+    if (firstContractor && !state.contractorsMaster.some(contractor => contractor.id === Number(issueForm.contractorId))) {
+      setIssueForm(previous => ({ ...previous, contractorId: firstContractor.id, contractorName: `${firstContractor.name} (${firstContractor.trade})` }));
+    }
+  }, [state.materialCategories, state.suppliers, state.contractorsMaster, inwardForm.materialCategoryId, inwardForm.supplierId, issueForm.materialCategoryId, issueForm.contractorId, wastageForm.materialCategoryId]);
+
   // Handlers
-  const handleAddInward = (e: React.FormEvent) => {
+  const handleAddInward = async (e: React.FormEvent) => {
     e.preventDefault();
     const qty = Number(inwardForm.quantityReceived);
     if (!qty || qty <= 0) return;
@@ -186,7 +219,7 @@ export const MaterialModule: React.FC = () => {
     const rate = Number(inwardForm.ratePerUnit) || 0;
 
     const newInward: MaterialInward = {
-      id: Date.now(),
+      id: createLocalId(),
       materialCategoryId: Number(inwardForm.materialCategoryId),
       itemName: inwardForm.itemName || (cat ? cat.name : 'Material'),
       supplierId: supp ? supp.id : undefined,
@@ -206,13 +239,12 @@ export const MaterialModule: React.FC = () => {
       dateReceived: new Date().toISOString(),
     };
 
-    saveAppState({
+    const draftNcr = newInward.qualityCheckPassed ? null : buildDraftNcrFromMaterialInward(newInward);
+    const result = await saveAppState({
       materialInward: [newInward, ...state.materialInward],
+      ...(draftNcr ? { ncrReports: [draftNcr, ...state.ncrReports] } : {}),
     });
-
-    if (!newInward.qualityCheckPassed) {
-      autoCreateDraftNcrFromMaterialInward(newInward);
-    }
+    if (!result.success) return;
 
     setIsInwardModalOpen(false);
     setInwardForm({
@@ -235,12 +267,12 @@ export const MaterialModule: React.FC = () => {
 
 
 
-  const handleAddSupplier = (e: React.FormEvent) => {
+  const handleAddSupplier = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supplierForm.name.trim()) return;
 
     const newSupplier: Supplier = {
-      id: Date.now(),
+      id: createLocalId(),
       name: supplierForm.name.trim(),
       contactPerson: supplierForm.contactPerson,
       phone: supplierForm.phone,
@@ -250,9 +282,10 @@ export const MaterialModule: React.FC = () => {
       status: 'ACTIVE',
     };
 
-    saveAppState({
+    const result = await saveAppState({
       suppliers: [newSupplier, ...state.suppliers],
     });
+    if (!result.success) return;
 
     setIsSupplierModalOpen(false);
     setSupplierForm({
@@ -265,7 +298,7 @@ export const MaterialModule: React.FC = () => {
     });
   };
 
-  const handleAddWastage = (e: React.FormEvent) => {
+  const handleAddWastage = async (e: React.FormEvent) => {
     e.preventDefault();
     const qty = Number(wastageForm.quantity);
     if (!qty || qty <= 0) return;
@@ -279,7 +312,7 @@ export const MaterialModule: React.FC = () => {
     }
 
     const newWastage: MaterialWastage = {
-      id: Date.now(),
+      id: createLocalId(),
       materialCategoryId: Number(wastageForm.materialCategoryId),
       itemName: finalItemName,
       quantity: qty,
@@ -289,9 +322,10 @@ export const MaterialModule: React.FC = () => {
       dateLogged: new Date().toISOString(),
     };
 
-    saveAppState({
+    const result = await saveAppState({
       materialWastage: [newWastage, ...state.materialWastage],
     });
+    if (!result.success) return;
 
     setIsWastageModalOpen(false);
     setWastageForm({
@@ -303,7 +337,7 @@ export const MaterialModule: React.FC = () => {
     });
   };
 
-  const handleReturnMaterial = (e: React.FormEvent) => {
+  const handleReturnMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedIssueForReturn) return;
 
@@ -323,7 +357,7 @@ export const MaterialModule: React.FC = () => {
       newTotalReturned >= selectedIssueForReturn.quantityIssued ? 'FULLY_RETURNED' : 'PARTIALLY_RETURNED';
 
     const newLog: MaterialReturnLog = {
-      id: Date.now(),
+      id: createLocalId(),
       quantityReturned: returnQty,
       returnedBy: returnForm.returnedBy.trim() || state.currentUser?.name || 'Site Engineer',
       dateReturned: new Date().toISOString(),
@@ -342,9 +376,10 @@ export const MaterialModule: React.FC = () => {
       return item;
     });
 
-    saveAppState({
+    const result = await saveAppState({
       materialIssued: updatedMaterialIssued,
     });
+    if (!result.success) return;
 
     setIsReturnModalOpen(false);
     setSelectedIssueForReturn(null);

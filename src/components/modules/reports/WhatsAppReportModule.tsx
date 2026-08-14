@@ -6,7 +6,8 @@ import {
   Package, Sparkles, Plus, Minus, RotateCcw, Clock, Save, History, FileText, Download, Sun, Moon, Trash2, Camera, Image as ImageIcon, AlertTriangle, ArrowRight, Layers, Zap
 } from 'lucide-react';
 import { DailyProgressReport, CementStockEntry, CustomTradeEntry, ContractorShiftRecord } from '@/types';
-import { getAppState, saveDailyReport, generateWhatsAppReportText, DEFAULT_SAMPLE_REPORT } from '@/lib/dbState';
+import { deleteDailyReport, saveDailyReport, generateWhatsAppReportText, DEFAULT_SAMPLE_REPORT } from '@/lib/dbState';
+import { useSiteOpsState } from '@/hooks/useSiteOpsState';
 import { downloadDPRPdfReport } from '@/lib/pdfReportGenerator';
 
 import { ReportHeaderEditor } from './components/ReportHeaderEditor';
@@ -15,7 +16,7 @@ import { CementStockEditor } from './components/CementStockEditor';
 import { WhatsAppMessagePreview } from './components/WhatsAppMessagePreview';
 
 export const WhatsAppReportModule: React.FC = () => {
-  const state = getAppState();
+  const { state } = useSiteOpsState();
   const latestSavedReport = state.dailyReports?.[0] || DEFAULT_SAMPLE_REPORT;
 
   const [report, setReport] = useState<DailyProgressReport>({
@@ -30,15 +31,23 @@ export const WhatsAppReportModule: React.FC = () => {
   const [pdfTheme, setPdfTheme] = useState<'light' | 'dark'>('light');
   const [activeTab, setActiveTab] = useState<'editor' | 'preview' | 'history'>('editor');
 
-  const handleSave = () => {
-    saveDailyReport(report);
+  const handleSave = async () => {
+    const result = await saveDailyReport(report);
+    if (!result.success) return;
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
   };
 
   const handleAutoFillFromPunchedShifts = () => {
     try {
-      const todayShifts = state.contractorShifts || [];
+      const normalizeDate = (value: string) => {
+        const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        return match ? `${match[3]}-${match[2]}-${match[1]}` : value.slice(0, 10);
+      };
+      const reportDate = normalizeDate(report.reportDate);
+      const todayShifts = (state.contractorShifts || []).filter(
+        shift => shift.status === 'COMPLETED' && normalizeDate(shift.reportDate) === reportDate
+      );
       if (!todayShifts.length) return;
 
       let carpenter = 0, fitter = 0, electrical = 0, plumber = 0;
@@ -94,6 +103,11 @@ export const WhatsAppReportModule: React.FC = () => {
     } finally {
       setIsGeneratingPdf(false);
     }
+  };
+
+  const handleDeleteReport = async (id: number) => {
+    if (!confirm('Delete this saved report?')) return;
+    await deleteDailyReport(id);
   };
 
   return (
@@ -157,6 +171,17 @@ export const WhatsAppReportModule: React.FC = () => {
         >
           2. Live WhatsApp & PDF Export
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('history')}
+          className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all ${
+            activeTab === 'history'
+              ? 'bg-zinc-800 text-emerald-400 border border-zinc-700'
+              : 'text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          3. Saved History ({state.dailyReports.length})
+        </button>
       </div>
 
       {/* Editor Tab */}
@@ -199,6 +224,25 @@ export const WhatsAppReportModule: React.FC = () => {
               {isGeneratingPdf ? 'Generating PDF...' : 'Download PDF Report'}
             </button>
           </div>
+        </div>
+      )}
+
+      {activeTab === 'history' && (
+        <div className="space-y-3">
+          {state.dailyReports.length === 0 ? (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-8 text-center text-sm text-zinc-500">No saved reports for this project.</div>
+          ) : state.dailyReports.map(savedReport => (
+            <div key={savedReport.id} className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+              <div>
+                <div className="font-semibold text-white">{savedReport.buildingName}</div>
+                <div className="text-xs text-zinc-400">{savedReport.reportDate} · {savedReport.createdByName || 'Site user'}</div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => { setReport(savedReport); setActiveTab('editor'); }} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-zinc-950">Open</button>
+                <button onClick={() => handleDeleteReport(savedReport.id)} className="rounded-lg bg-red-900 px-3 py-1.5 text-xs font-bold text-red-100">Delete</button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
