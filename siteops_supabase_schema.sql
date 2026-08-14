@@ -67,8 +67,15 @@ CREATE TABLE IF NOT EXISTS material_issued (
     material_category_id INT REFERENCES material_categories(id) ON DELETE CASCADE,
     item_name VARCHAR(200) NOT NULL,
     quantity_issued NUMERIC(12,2) NOT NULL,
+    quantity_returned NUMERIC(12,2) DEFAULT 0,
+    return_status VARCHAR(50) DEFAULT 'NOT_RETURNED',
+    return_logs JSONB DEFAULT '[]'::jsonb,
     unit VARCHAR(20) NOT NULL,
     issued_to VARCHAR(200) NOT NULL,
+    contractor_id INT,
+    contractor_name VARCHAR(150),
+    location VARCHAR(200),
+    engineer_remarks TEXT,
     issued_by VARCHAR(100),
     date_issued TIMESTAMPTZ DEFAULT NOW()
 );
@@ -343,26 +350,108 @@ CREATE TABLE IF NOT EXISTS daily_progress_reports (
     building_name VARCHAR(200) NOT NULL,
     format_style VARCHAR(50) DEFAULT 'PROFESSIONAL',
     carpenter_count INT DEFAULT 0,
+    carpenter_notes TEXT,
     fitter_count INT DEFAULT 0,
+    fitter_notes TEXT,
     electrical_count INT DEFAULT 0,
+    electrical_notes TEXT,
     plumber_count INT DEFAULT 0,
+    plumber_notes TEXT,
     core_cutting_count INT DEFAULT 0,
+    core_cutting_notes TEXT,
     fabrication_count INT DEFAULT 0,
+    fabrication_notes TEXT,
     suraj_chauhan_tiles_count INT DEFAULT 0,
     suraj_chauhan_notes TEXT,
     mohan_khetawat_waterproofing_count INT DEFAULT 0,
     mohan_khetawat_notes TEXT,
     naresh_khetawat_waterproofing_count INT DEFAULT 0,
     naresh_khetawat_notes TEXT,
+    custom_trades JSONB DEFAULT '[]'::jsonb,
     bathkam JSONB,
+    bathkam_breaker_notes TEXT,
     department_staff_count INT DEFAULT 0,
     department_labour_count INT DEFAULT 0,
     department_tasks_notes TEXT,
-    cement_stock JSONB,
+    cement_stock JSONB DEFAULT '[]'::jsonb,
+    before_photos JSONB DEFAULT '[]'::jsonb,
+    after_photos JSONB DEFAULT '[]'::jsonb,
+    work_photo_sets JSONB DEFAULT '[]'::jsonb,
+    damage_deductions JSONB DEFAULT '[]'::jsonb,
+    worker_attendance_logs JSONB DEFAULT '[]'::jsonb,
     created_by_name VARCHAR(100),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 ALTER TABLE daily_progress_reports ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow public read-write daily_progress_reports" ON daily_progress_reports FOR ALL USING (true);
+
+-- 25. Contractors Master
+CREATE TABLE IF NOT EXISTS contractors_master (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    trade VARCHAR(100) NOT NULL,
+    phone VARCHAR(30),
+    status VARCHAR(20) DEFAULT 'ACTIVE',
+    default_rate_per_worker NUMERIC(10,2) DEFAULT 0,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 26. Contractor Shifts Register
+CREATE TABLE IF NOT EXISTS contractor_shifts (
+    id BIGINT PRIMARY KEY,
+    contractor_id INT REFERENCES contractors_master(id) ON DELETE SET NULL,
+    contractor_name VARCHAR(150) NOT NULL,
+    trade VARCHAR(100) NOT NULL,
+    report_date VARCHAR(50) NOT NULL,
+    shift_start_time VARCHAR(20) NOT NULL,
+    shift_end_time VARCHAR(20),
+    worker_count INT NOT NULL DEFAULT 1,
+    regular_hours NUMERIC(5,2),
+    overtime_hours NUMERIC(5,2) DEFAULT 0,
+    work_location VARCHAR(200),
+    work_description TEXT,
+    status VARCHAR(20) DEFAULT 'IN_PROGRESS',
+    logged_by VARCHAR(100),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ
+);
+
+-- 27. Contractor Material Allocations
+CREATE TABLE IF NOT EXISTS contractor_material_allocations (
+    id SERIAL PRIMARY KEY,
+    contractor_id INT REFERENCES contractors_master(id) ON DELETE CASCADE,
+    material_category_id INT REFERENCES material_categories(id) ON DELETE CASCADE,
+    quantity_allocated NUMERIC(12,2) NOT NULL,
+    unit VARCHAR(20) NOT NULL,
+    date_allocated DATE DEFAULT CURRENT_DATE,
+    allocated_by VARCHAR(100),
+    notes TEXT
+);
+
+-- 28. Material Damage & Deductions
+CREATE TABLE IF NOT EXISTS material_damage_deductions (
+    id SERIAL PRIMARY KEY,
+    contractor_id INT REFERENCES contractors_master(id) ON DELETE CASCADE,
+    contractor_name VARCHAR(150) NOT NULL,
+    trade VARCHAR(100),
+    material_name VARCHAR(200) NOT NULL,
+    damage_amount NUMERIC(12,2) NOT NULL,
+    description TEXT,
+    photos TEXT[],
+    date_logged DATE DEFAULT CURRENT_DATE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE contractors_master ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contractor_shifts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contractor_material_allocations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE material_damage_deductions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read-write contractors_master" ON contractors_master FOR ALL USING (true);
+CREATE POLICY "Allow public read-write contractor_shifts" ON contractor_shifts FOR ALL USING (true);
+CREATE POLICY "Allow public read-write contractor_material_allocations" ON contractor_material_allocations FOR ALL USING (true);
+CREATE POLICY "Allow public read-write material_damage_deductions" ON material_damage_deductions FOR ALL USING (true);
+
 

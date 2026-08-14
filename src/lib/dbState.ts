@@ -4,7 +4,8 @@ import {
   EquipmentTypeMaster, Equipment, EquipmentUsage, EquipmentPayment,
   Visitor, Meeting, SitePhoto,
   SafetyCheckItem, SafetyChecklistRecord, SafetyIncident, PPEIssuance,
-  CubeTest, MaterialTest, NCRReport, Site, AppUser, DailyProgressReport
+  CubeTest, MaterialTest, NCRReport, Site, AppUser, DailyProgressReport, ContractorMaster,
+  ContractorShiftRecord, ContractorMaterialAllocation, MaterialDamageDeduction
 } from '../types';
 
 import {
@@ -12,15 +13,9 @@ import {
   INITIAL_EQUIPMENT_TYPES, INITIAL_SAFETY_CHECK_ITEMS
 } from './seedMasters';
 
-import { ContractorMaster } from '../types';
+import { saveStateToSupabase, fetchStateFromSupabase } from './supabaseSync';
 
-const LOCAL_STORAGE_KEY = 'siteops_app_state_v1';
-
-export const INITIAL_CONTRACTORS_MASTER: ContractorMaster[] = [
-  { id: 1, name: 'Suraj Chauhan', trade: 'Tiles', phone: '+91 98220 12345', status: 'ACTIVE', notes: 'Window and door frame, kitchen bottom & top, wall tiles' },
-  { id: 2, name: 'Mohan Khetawat', trade: 'Waterproofing', phone: '+91 98220 67890', status: 'ACTIVE', notes: 'Terrace & slab waterproofing' },
-  { id: 3, name: 'Naresh Khetawat', trade: 'Waterproofing', phone: '+91 98220 54321', status: 'ACTIVE', notes: 'Toilet, balcony & shaft waterproofing' },
-];
+export const INITIAL_CONTRACTORS_MASTER: ContractorMaster[] = [];
 
 export interface SiteOpsState {
   sites: Site[];
@@ -54,6 +49,9 @@ export interface SiteOpsState {
   ncrReports: NCRReport[];
   
   dailyReports: DailyProgressReport[];
+  contractorShifts: ContractorShiftRecord[];
+  contractorMaterialAllocations: ContractorMaterialAllocation[];
+  materialDamageDeductions: MaterialDamageDeduction[];
 
   activeSiteId: number;
   currentUser: AppUser | null;
@@ -64,15 +62,55 @@ const listeners: Array<() => void> = [];
 
 export function getAppState(): SiteOpsState {
   if (!currentState) {
-    currentState = loadInitialState();
+    currentState = getInitialDefaultState();
   }
   return currentState;
 }
 
+export async function initializeAppStateFromSupabase(): Promise<SiteOpsState> {
+  const remoteState = await fetchStateFromSupabase();
+  if (remoteState) {
+    const current = getAppState();
+    currentState = {
+      ...current,
+      sites: remoteState.sites || current.sites,
+      contractorsMaster: remoteState.contractorsMaster || current.contractorsMaster,
+      materialCategories: remoteState.materialCategories || current.materialCategories,
+      suppliers: remoteState.suppliers || current.suppliers,
+      materialInward: remoteState.materialInward || current.materialInward,
+      materialIssued: remoteState.materialIssued || current.materialIssued,
+      materialWastage: remoteState.materialWastage || current.materialWastage,
+      expenseCategories: remoteState.expenseCategories || current.expenseCategories,
+      expenses: remoteState.expenses || current.expenses,
+      fundRequisitions: remoteState.fundRequisitions || current.fundRequisitions,
+      equipmentTypes: remoteState.equipmentTypes || current.equipmentTypes,
+      equipment: remoteState.equipment || current.equipment,
+      equipmentUsage: remoteState.equipmentUsage || current.equipmentUsage,
+      equipmentPayments: remoteState.equipmentPayments || current.equipmentPayments,
+      visitors: remoteState.visitors || current.visitors,
+      meetings: remoteState.meetings || current.meetings,
+      sitePhotos: remoteState.sitePhotos || current.sitePhotos,
+      safetyCheckItems: remoteState.safetyCheckItems || current.safetyCheckItems,
+      safetyChecklists: remoteState.safetyChecklists || current.safetyChecklists,
+      safetyIncidents: remoteState.safetyIncidents || current.safetyIncidents,
+      ppeIssuance: remoteState.ppeIssuance || current.ppeIssuance,
+      cubeTests: remoteState.cubeTests || current.cubeTests,
+      materialTests: remoteState.materialTests || current.materialTests,
+      ncrReports: remoteState.ncrReports || current.ncrReports,
+      dailyReports: remoteState.dailyReports || current.dailyReports,
+      contractorShifts: remoteState.contractorShifts || current.contractorShifts,
+      contractorMaterialAllocations: remoteState.contractorMaterialAllocations || current.contractorMaterialAllocations,
+      materialDamageDeductions: remoteState.materialDamageDeductions || current.materialDamageDeductions,
+    };
+    notifyListeners();
+  }
+  return getAppState();
+}
+
 export const DEFAULT_SAMPLE_REPORT: DailyProgressReport = {
   id: 1,
-  reportDate: '13/08/2026',
-  buildingName: 'B-Building Work Progress',
+  reportDate: new Date().toLocaleDateString('en-GB'),
+  buildingName: 'Main Site Progress',
   formatStyle: 'PROFESSIONAL',
   carpenterCount: 0,
   fitterCount: 0,
@@ -80,12 +118,7 @@ export const DEFAULT_SAMPLE_REPORT: DailyProgressReport = {
   plumberCount: 0,
   coreCuttingCount: 0,
   fabricationCount: 0,
-  surajChauhanTilesCount: 0,
-  surajChauhanNotes: 'Window and door frame and kitchen bottom & top laying & kitchen wall tiles laying',
-  mohanKhetawatWaterproofingCount: 0,
-  mohanKhetawatNotes: 'Water proofing',
-  nareshKhetawatWaterproofingCount: 0,
-  nareshKhetawatNotes: 'Water proofing',
+  customTrades: [],
   bathkam: {
     plasterWork: 0,
     materialShifting: 0,
@@ -95,67 +128,15 @@ export const DEFAULT_SAMPLE_REPORT: DailyProgressReport = {
   },
   departmentStaffCount: 0,
   departmentLabourCount: 0,
-  departmentTasksNotes: 'Slab, column, brick wall & plaster curing & cleaning waste material',
-  cementStock: [
-    { brandName: 'Birla Super Cement', type: 'OPC', bags: 80 },
-    { brandName: 'JK Super Cement', type: 'PPC', bags: 100 },
-    { brandName: 'Sanla', type: '', bags: 45 },
-    { brandName: 'Ambuja Cement', type: 'OPC', bags: 0 },
-  ],
+  departmentTasksNotes: '',
+  cementStock: [],
   beforePhotos: [],
   afterPhotos: [],
   createdByName: 'Site Engineer',
   createdAt: new Date().toISOString()
 };
 
-function loadInitialState(): SiteOpsState {
-  if (typeof window !== 'undefined') {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return {
-          ...parsed,
-          sites: parsed.sites?.length ? parsed.sites : INITIAL_SITES,
-          contractorsMaster: parsed.contractorsMaster?.length ? parsed.contractorsMaster : INITIAL_CONTRACTORS_MASTER,
-          materialCategories: parsed.materialCategories?.length ? parsed.materialCategories : INITIAL_MATERIAL_CATEGORIES,
-          expenseCategories: parsed.expenseCategories?.length ? parsed.expenseCategories : INITIAL_EXPENSE_CATEGORIES,
-          equipmentTypes: parsed.equipmentTypes?.length ? parsed.equipmentTypes : INITIAL_EQUIPMENT_TYPES,
-          safetyCheckItems: parsed.safetyCheckItems?.length ? parsed.safetyCheckItems : INITIAL_SAFETY_CHECK_ITEMS,
-          suppliers: parsed.suppliers || [],
-          materialInward: parsed.materialInward || [],
-          materialIssued: parsed.materialIssued || [],
-          materialWastage: parsed.materialWastage || [],
-          expenses: parsed.expenses || [],
-          fundRequisitions: parsed.fundRequisitions || [],
-          equipment: parsed.equipment || [],
-          equipmentUsage: parsed.equipmentUsage || [],
-          equipmentPayments: parsed.equipmentPayments || [],
-          visitors: parsed.visitors || [],
-          meetings: parsed.meetings || [],
-          sitePhotos: parsed.sitePhotos || [],
-          safetyChecklists: parsed.safetyChecklists || [],
-          safetyIncidents: parsed.safetyIncidents || [],
-          ppeIssuance: parsed.ppeIssuance || [],
-          cubeTests: parsed.cubeTests || [],
-          materialTests: parsed.materialTests || [],
-          ncrReports: parsed.ncrReports || [],
-          dailyReports: parsed.dailyReports?.length ? parsed.dailyReports : [DEFAULT_SAMPLE_REPORT],
-          activeSiteId: parsed.activeSiteId || 1,
-          currentUser: parsed.currentUser || {
-            id: 1,
-            username: 'admin',
-            name: 'Site Manager',
-            role: 'admin',
-            email: 'admin@siteops.com'
-          }
-        };
-      }
-    } catch (e) {
-      console.error('[SiteOps] Error loading state from localStorage:', e);
-    }
-  }
-
+function getInitialDefaultState(): SiteOpsState {
   return {
     sites: INITIAL_SITES,
     contractorsMaster: INITIAL_CONTRACTORS_MASTER,
@@ -182,6 +163,9 @@ function loadInitialState(): SiteOpsState {
     materialTests: [],
     ncrReports: [],
     dailyReports: [DEFAULT_SAMPLE_REPORT],
+    contractorShifts: [],
+    contractorMaterialAllocations: [],
+    materialDamageDeductions: [],
     activeSiteId: 1,
     currentUser: {
       id: 1,
@@ -195,14 +179,22 @@ function loadInitialState(): SiteOpsState {
 
 export function saveAppState(newState: Partial<SiteOpsState>) {
   const current = getAppState();
-  currentState = { ...current, ...newState };
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(currentState));
-    } catch (e) {
-      console.error('[SiteOps] Error saving state to localStorage:', e);
+  const cleanedNewState: Partial<SiteOpsState> = {};
+  
+  // Exclude undefined keys from merging
+  for (const key of Object.keys(newState) as Array<keyof SiteOpsState>) {
+    if (newState[key] !== undefined) {
+      (cleanedNewState as any)[key] = newState[key];
     }
   }
+
+  currentState = { ...current, ...cleanedNewState };
+
+  // Direct save & sync to Supabase Postgres Cloud
+  saveStateToSupabase(cleanedNewState).catch(e =>
+    console.error('[SiteOps Storage] Direct Supabase save error:', e)
+  );
+
   notifyListeners();
 }
 
@@ -239,20 +231,26 @@ export function getStockSummary() {
       .filter(i => i.materialCategoryId === cat.id)
       .reduce((sum, i) => sum + i.quantityReceived, 0);
 
-    const issued = state.materialIssued
+    const grossIssued = state.materialIssued
       .filter(i => i.materialCategoryId === cat.id)
       .reduce((sum, i) => sum + i.quantityIssued, 0);
+
+    const totalReturned = state.materialIssued
+      .filter(i => i.materialCategoryId === cat.id)
+      .reduce((sum, i) => sum + (i.quantityReturned || 0), 0);
+
+    const netIssued = grossIssued - totalReturned;
 
     const wastage = state.materialWastage
       .filter(w => w.materialCategoryId === cat.id)
       .reduce((sum, w) => sum + w.quantity, 0);
 
-    const currentStock = inward - issued - wastage;
+    const currentStock = inward - netIssued - wastage;
 
     summary[cat.id] = {
       category: cat,
       totalInward: inward,
-      totalIssued: issued,
+      totalIssued: netIssued,
       totalWastage: wastage,
       currentStock,
       unit: cat.defaultUnit,
@@ -263,9 +261,6 @@ export function getStockSummary() {
   return summary;
 }
 
-// ==========================================
-// WHATSAPP REPORT GENERATOR HELPER (Format 1)
-// ==========================================
 export function generateWhatsAppReportText(report: DailyProgressReport): string {
   const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
   
@@ -276,14 +271,16 @@ export function generateWhatsAppReportText(report: DailyProgressReport): string 
     (report.bathkam?.baiLabour || 0);
 
   const customTradesTotal = (report.customTrades || []).reduce((sum, ct) => sum + (ct.count || 0), 0);
+  const legacyContractorsTotal = 
+    (report.surajChauhanTilesCount || 0) +
+    (report.mohanKhetawatWaterproofingCount || 0) +
+    (report.nareshKhetawatWaterproofingCount || 0);
 
   const totalManpower = 
     (report.carpenterCount || 0) +
     (report.fitterCount || 0) +
     (report.electricalCount || 0) +
-    (report.surajChauhanTilesCount || 0) +
-    (report.mohanKhetawatWaterproofingCount || 0) +
-    (report.nareshKhetawatWaterproofingCount || 0) +
+    legacyContractorsTotal +
     bathkamTotal +
     (report.plumberCount || 0) +
     (report.coreCuttingCount || 0) +
@@ -293,9 +290,11 @@ export function generateWhatsAppReportText(report: DailyProgressReport): string 
     (report.fabricationCount || 0) +
     customTradesTotal;
 
-  const cementLines = (report.cementStock || []).map(c => 
-    `• ${c.brandName}${c.type ? ` (${c.type})` : ''} = *${pad(c.bags || 0)} Bags*`
-  ).join('\n');
+  const cementLines = (report.cementStock || []).length > 0
+    ? (report.cementStock || []).map(c => 
+        `• ${c.brandName}${c.type ? ` (${c.type})` : ''} = *${pad(c.bags || 0)} Bags*`
+      ).join('\n')
+    : '• No stock reported';
 
   const getNoteLine = (note?: string) => (note ? `\n  └ _(${note})_` : '');
 
@@ -303,41 +302,31 @@ export function generateWhatsAppReportText(report: DailyProgressReport): string 
     `• ${ct.tradeName}${ct.contractorName ? ` (${ct.contractorName})` : ''} = *${pad(ct.count || 0)}*${getNoteLine(ct.notes)}`
   ).join('\n\n');
 
-  return `🏗️ *${report.buildingName || 'B-Building Work Progress'}*
+  return `🏗️ *${report.buildingName || 'Main Site Progress'}*
 
-📅 *Date:* ${report.reportDate || '13/08/2026'}
+📅 *Date:* ${report.reportDate || new Date().toLocaleDateString('en-GB')}
 
 ━━━━━━━━━━━━━━━━━━━━━
 👷‍♂️ *TOTAL MANPOWER ON SITE: ${pad(totalManpower)}*
 
 🛠️ *Skilled Trades & Contractors:*
 • Carpenter = *${pad(report.carpenterCount || 0)}*${getNoteLine(report.carpenterNotes)}
-• Fitter = *${pad(report.fitterCount || 0)}*${getNoteLine(report.fitterNotes)}
-
+• Steel Fitter = *${pad(report.fitterCount || 0)}*${getNoteLine(report.fitterNotes)}
 • Electrical = *${pad(report.electricalCount || 0)}*${getNoteLine(report.electricalNotes)}
-
-• Tiles (Suraj Chauhan) = *${pad(report.surajChauhanTilesCount || 0)}*${getNoteLine(report.surajChauhanNotes || 'window and door frame and kitchen bottom & top laying & kitchen wall tiles laying')}
-
-• Waterproofing (Mohan Khetawat) = *${pad(report.mohanKhetawatWaterproofingCount || 0)}*${getNoteLine(report.mohanKhetawatNotes || 'water proofing')}
-
+• Plumber = *${pad(report.plumberCount || 0)}*${getNoteLine(report.plumberNotes)}
 • Bathkam = *${pad(bathkamTotal)}*
   ├ ${pad(report.bathkam?.plasterWork || 0)} - Plaster Work
   ├ ${pad(report.bathkam?.materialShifting || 0)} - Material Shifting
   ├ ${pad(report.bathkam?.brickWork || 0)} - Brick Work
   └ ${pad(report.bathkam?.baiLabour || 0)} - Bai (Female Labour)
-
-• Plumber = *${pad(report.plumberCount || 0)}*${getNoteLine(report.plumberNotes)}
-• Waterproofing (Naresh Khetawat) = *${pad(report.nareshKhetawatWaterproofingCount || 0)}*${getNoteLine(report.nareshKhetawatNotes || 'water proofing')}
-• Core Cutting = *${pad(report.coreCuttingCount || 0)}*${getNoteLine(report.coreCuttingNotes)}
-
-• Fabrication = *${pad(report.fabricationCount || 0)}*${getNoteLine(report.fabricationNotes)}
+${report.coreCuttingCount ? `\n• Core Cutting = *${pad(report.coreCuttingCount)}*${getNoteLine(report.coreCuttingNotes)}` : ''}
+${report.fabricationCount ? `\n• Fabrication = *${pad(report.fabricationCount)}*${getNoteLine(report.fabricationNotes)}` : ''}
 ${customTradeLines ? `\n${customTradeLines}` : ''}
 
 👔 *Department & Staff:*
 • Department Staff = *${pad(report.departmentStaffCount || 0)}*
-
-• Department Labour = *${pad(report.departmentLabourCount || 0)}*${getNoteLine(report.departmentTasksNotes || 'slab, column, brick wall & plaster curing & cleaning waste material')}
-• Bathkam (Breaker Work) = *${pad(report.bathkam?.breakerWork || 0)}*${getNoteLine(report.bathkamBreakerNotes || 'breaker work')}
+• Department Labour = *${pad(report.departmentLabourCount || 0)}*${getNoteLine(report.departmentTasksNotes)}
+• Bathkam (Breaker Work) = *${pad(report.bathkam?.breakerWork || 0)}*${getNoteLine(report.bathkamBreakerNotes)}
 
 ━━━━━━━━━━━━━━━━━━━━━
 📦 *STOCK CEMENT*
@@ -370,6 +359,10 @@ export function deleteDailyReport(id: number) {
   saveAppState({ dailyReports: updatedReports });
 }
 
+// ==========================================
+// MASTER DATA MANAGEMENT HELPERS
+// ==========================================
+
 export function saveContractor(contractor: ContractorMaster) {
   const state = getAppState();
   const existingIdx = state.contractorsMaster.findIndex(c => c.id === contractor.id);
@@ -392,6 +385,86 @@ export function deleteContractor(id: number) {
   saveAppState({ contractorsMaster: updated });
 }
 
+export function saveMaterialCategory(cat: MaterialCategory) {
+  const state = getAppState();
+  const existingIdx = state.materialCategories.findIndex(c => c.id === cat.id);
+  let updated: MaterialCategory[];
+  if (existingIdx > -1) {
+    updated = [...state.materialCategories];
+    updated[existingIdx] = cat;
+  } else {
+    const newId = state.materialCategories.length > 0 ? Math.max(...state.materialCategories.map(c => c.id)) + 1 : 1;
+    updated = [{ ...cat, id: newId }, ...state.materialCategories];
+  }
+  saveAppState({ materialCategories: updated });
+}
+
+export function deleteMaterialCategory(id: number) {
+  const state = getAppState();
+  const updated = state.materialCategories.filter(c => c.id !== id);
+  saveAppState({ materialCategories: updated });
+}
+
+export function saveExpenseCategory(cat: ExpenseCategory) {
+  const state = getAppState();
+  const existingIdx = state.expenseCategories.findIndex(c => c.id === cat.id);
+  let updated: ExpenseCategory[];
+  if (existingIdx > -1) {
+    updated = [...state.expenseCategories];
+    updated[existingIdx] = cat;
+  } else {
+    const newId = state.expenseCategories.length > 0 ? Math.max(...state.expenseCategories.map(c => c.id)) + 1 : 1;
+    updated = [{ ...cat, id: newId }, ...state.expenseCategories];
+  }
+  saveAppState({ expenseCategories: updated });
+}
+
+export function deleteExpenseCategory(id: number) {
+  const state = getAppState();
+  const updated = state.expenseCategories.filter(c => c.id !== id);
+  saveAppState({ expenseCategories: updated });
+}
+
+export function saveEquipmentType(eq: EquipmentTypeMaster) {
+  const state = getAppState();
+  const existingIdx = state.equipmentTypes.findIndex(e => e.id === eq.id);
+  let updated: EquipmentTypeMaster[];
+  if (existingIdx > -1) {
+    updated = [...state.equipmentTypes];
+    updated[existingIdx] = eq;
+  } else {
+    const newId = state.equipmentTypes.length > 0 ? Math.max(...state.equipmentTypes.map(e => e.id)) + 1 : 1;
+    updated = [{ ...eq, id: newId }, ...state.equipmentTypes];
+  }
+  saveAppState({ equipmentTypes: updated });
+}
+
+export function deleteEquipmentType(id: number) {
+  const state = getAppState();
+  const updated = state.equipmentTypes.filter(e => e.id !== id);
+  saveAppState({ equipmentTypes: updated });
+}
+
+export function saveSupplier(supplier: Supplier) {
+  const state = getAppState();
+  const existingIdx = state.suppliers.findIndex(s => s.id === supplier.id);
+  let updated: Supplier[];
+  if (existingIdx > -1) {
+    updated = [...state.suppliers];
+    updated[existingIdx] = supplier;
+  } else {
+    const newId = state.suppliers.length > 0 ? Math.max(...state.suppliers.map(s => s.id)) + 1 : 1;
+    updated = [{ ...supplier, id: newId }, ...state.suppliers];
+  }
+  saveAppState({ suppliers: updated });
+}
+
+export function deleteSupplier(id: number) {
+  const state = getAppState();
+  const updated = state.suppliers.filter(s => s.id !== id);
+  saveAppState({ suppliers: updated });
+}
+
 export function exportDatabaseBackup(): string {
   const state = getAppState();
   return JSON.stringify(state, null, 2);
@@ -411,3 +484,44 @@ export function importDatabaseBackup(jsonContent: string): boolean {
   }
 }
 
+// ==========================================
+// CROSS-MODULE AUTOMATION HELPERS
+// ==========================================
+
+export function autoCreateDraftNcrFromMaterialInward(inward: MaterialInward) {
+  const state = getAppState();
+  const newNcr: NCRReport = {
+    id: Date.now(),
+    location: inward.supplierName ? `GRN Inward - ${inward.supplierName}` : 'Material Receiving Bay',
+    description: `[DRAFT NCR - QC Failed] ${inward.itemName} (${inward.quantityReceived} ${inward.unit}). Notes: ${inward.qualityNotes || 'Rejected during receiving inspection.'}`,
+    assignedTo: inward.receivedBy || 'Quality Inspector',
+    status: 'OPEN',
+    createdAt: new Date().toISOString(),
+  };
+
+  saveAppState({
+    ncrReports: [newNcr, ...(state.ncrReports || [])],
+  });
+}
+
+export function createDraftExpenseFromMachineryPayment(payment: EquipmentPayment, equipmentName?: string) {
+  const state = getAppState();
+  let mappedMode: 'CASH' | 'UPI' | 'BANK_TRANSFER' | 'OTHER' = 'CASH';
+  if (payment.paymentMode === 'BANK_TRANSFER') mappedMode = 'BANK_TRANSFER';
+  else if (payment.paymentMode === 'CHEQUE') mappedMode = 'OTHER';
+
+  const newExpense: Expense = {
+    id: Date.now(),
+    category: 'Transport & Freight',
+    description: `[DRAFT Expense - Pending Approval] Machinery Payment for ${equipmentName || 'Equipment'}. Notes: ${payment.notes || 'Rental Payment'}`,
+    amount: payment.amountPaid,
+    paidTo: payment.notes || 'Equipment Vendor',
+    paymentMode: mappedMode,
+    receiptPhotoUrl: payment.receiptPhotoUrl,
+    dateLogged: payment.paymentDate || new Date().toISOString().split('T')[0],
+  };
+
+  saveAppState({
+    expenses: [newExpense, ...(state.expenses || [])],
+  });
+}

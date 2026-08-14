@@ -8,12 +8,14 @@ import {
 import { ModuleTab } from '@/types';
 import { getAppState, getStockSummary } from '@/lib/dbState';
 
+import { useSiteOpsState } from '@/hooks/useSiteOpsState';
+
 interface HomeDashboardProps {
   onSelectTab: (tab: ModuleTab) => void;
 }
 
 export const HomeDashboard: React.FC<HomeDashboardProps> = ({ onSelectTab }) => {
-  const state = getAppState();
+  const { state } = useSiteOpsState();
   const stockSummary = getStockSummary();
 
   const lowStockItems = Object.values(stockSummary).filter(s => s.isLowStock);

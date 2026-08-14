@@ -5,12 +5,13 @@ import { Banknote, Plus, Coffee, Truck, ShoppingBag, Fuel, FileText, Cross, More
 import { Expense, FundRequisition } from '@/types';
 import { getAppState, saveAppState } from '@/lib/dbState';
 
+import { useSiteOpsState } from '@/hooks/useSiteOpsState';
+
 export const CashModule: React.FC = () => {
+  const { state, updateState } = useSiteOpsState();
   const [activeSubTab, setActiveSubTab] = useState<'expenses' | 'requisitions' | 'summary'>('expenses');
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isRequisitionModalOpen, setIsRequisitionModalOpen] = useState(false);
-
-  const state = getAppState();
 
   // Expense Form State
   const [expenseForm, setExpenseForm] = useState({
@@ -77,6 +78,19 @@ export const CashModule: React.FC = () => {
     setReqForm({ amountRequested: '', purpose: '' });
   };
 
+  const handleApproveExpense = (id: number) => {
+    const updated = state.expenses.map(e => {
+      if (e.id === id) {
+        return {
+          ...e,
+          description: e.description.replace('[DRAFT Expense - Pending Approval]', '[APPROVED Expense]'),
+        };
+      }
+      return e;
+    });
+    saveAppState({ expenses: updated });
+  };
+
   const totalSpent = state.expenses.reduce((sum, e) => sum + e.amount, 0);
   const totalRequisitions = state.fundRequisitions.reduce((sum, r) => sum + r.amountRequested, 0);
 
@@ -117,18 +131,10 @@ export const CashModule: React.FC = () => {
         <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800">
           <div className="text-[10px] uppercase font-bold text-zinc-500">Total Expenses Logged</div>
           <div className="text-2xl font-black text-emerald-400 mt-1">₹{totalSpent.toLocaleString()}</div>
-          <div className="text-[11px] text-zinc-400 mt-0.5">{state.expenses.length} entries</div>
         </div>
         <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800">
-          <div className="text-[10px] uppercase font-bold text-zinc-500">Total Funds Requested</div>
+          <div className="text-[10px] uppercase font-bold text-zinc-500">Fund Requisitions</div>
           <div className="text-2xl font-black text-amber-400 mt-1">₹{totalRequisitions.toLocaleString()}</div>
-          <div className="text-[11px] text-zinc-400 mt-0.5">{state.fundRequisitions.length} requests</div>
-        </div>
-        <div className="col-span-2 sm:col-span-1 p-4 rounded-2xl bg-zinc-900 border border-zinc-800">
-          <div className="text-[10px] uppercase font-bold text-zinc-500">Top Expense Category</div>
-          <div className="text-lg font-bold text-white mt-1">
-            {state.expenses.length > 0 ? state.expenses[0].category : 'N/A'}
-          </div>
         </div>
       </div>
 
@@ -142,7 +148,7 @@ export const CashModule: React.FC = () => {
               : 'text-zinc-400 hover:text-zinc-200'
           }`}
         >
-          💸 Daily Expenses ({state.expenses.length})
+          🧾 Daily Expenses ({state.expenses.length})
         </button>
         <button
           onClick={() => setActiveSubTab('requisitions')}
@@ -152,7 +158,7 @@ export const CashModule: React.FC = () => {
               : 'text-zinc-400 hover:text-zinc-200'
           }`}
         >
-          📥 Fund Requisitions ({state.fundRequisitions.length})
+          💵 Fund Requisitions ({state.fundRequisitions.length})
         </button>
       </div>
 
@@ -163,35 +169,47 @@ export const CashModule: React.FC = () => {
             <div className="p-8 text-center bg-zinc-900/60 rounded-2xl border border-zinc-800">
               <Banknote className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
               <h3 className="font-bold text-sm text-zinc-300">No Expenses Logged Yet</h3>
-              <p className="text-xs text-zinc-500 mt-1">Log tea, snacks, local hardware purchases, fuel, and transport expenses.</p>
-              <button
-                onClick={() => setIsExpenseModalOpen(true)}
-                className="mt-4 px-4 py-2 rounded-xl bg-emerald-500 text-zinc-950 font-bold text-xs"
-              >
-                + Log First Expense
-              </button>
             </div>
           ) : (
             <div className="space-y-2">
-              {state.expenses.map((e) => (
-                <div key={e.id} className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-between">
-                  <div className="space-y-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm font-bold text-white">{e.description}</span>
-                      <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 text-[10px] font-medium border border-zinc-700">
-                        {e.category}
-                      </span>
+              {state.expenses.map((e) => {
+                const isDraft = e.description.includes('[DRAFT Expense');
+                return (
+                  <div key={e.id} className={`p-4 rounded-xl border flex items-center justify-between transition ${
+                    isDraft ? 'bg-amber-950/20 border-amber-500/30' : 'bg-zinc-900 border-zinc-800'
+                  }`}>
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-sm font-bold text-white">{e.description}</span>
+                        <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 text-[10px] font-medium border border-zinc-700">
+                          {e.category}
+                        </span>
+                        {isDraft && (
+                          <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
+                            Draft (Pending Approval)
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-zinc-400">
+                        Paid To: <span className="text-zinc-200">{e.paidTo || 'N/A'}</span> • Mode: <span className="text-emerald-400 font-mono">{e.paymentMode}</span>
+                      </div>
                     </div>
-                    <div className="text-xs text-zinc-400">
-                      Paid To: <span className="text-zinc-200">{e.paidTo || 'N/A'}</span> • Mode: <span className="text-emerald-400 font-mono">{e.paymentMode}</span>
+                    <div className="text-right space-y-1">
+                      <div className="text-lg font-black text-emerald-400">₹{e.amount.toLocaleString()}</div>
+                      {isDraft ? (
+                        <button
+                          onClick={() => handleApproveExpense(e.id)}
+                          className="px-2.5 py-1 text-[11px] font-bold bg-amber-500 text-zinc-950 rounded-lg hover:bg-amber-400 shadow"
+                        >
+                          Approve Expense
+                        </button>
+                      ) : (
+                        <div className="text-[10px] text-zinc-500">{e.dateLogged}</div>
+                      )}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-lg font-black text-emerald-400">₹{e.amount.toLocaleString()}</div>
-                    <div className="text-[10px] text-zinc-500">{e.dateLogged}</div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

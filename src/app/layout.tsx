@@ -9,11 +9,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: 'ConstructTrack SiteOps — Site Operations Companion',
-  description: 'Mobile-First PWA for site logistics, material GRN, stock ledger, petty cash, rented machinery, safety compliance, and quality testing.',
-  manifest: '/manifest.json',
-  icons: [
-    { rel: 'apple-touch-icon', url: '/icons/icon-192.png' },
-  ],
+  description: 'Mobile-First application for site logistics, material GRN, stock ledger, petty cash, rented machinery, safety compliance, and quality testing.',
 };
 
 export const viewport: Viewport = {

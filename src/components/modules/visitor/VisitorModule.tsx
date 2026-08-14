@@ -5,13 +5,14 @@ import { Users, Plus, Camera, Calendar, UserCheck, MessageSquare, Image, CheckCi
 import { Visitor, Meeting, SitePhoto } from '@/types';
 import { getAppState, saveAppState } from '@/lib/dbState';
 
+import { useSiteOpsState } from '@/hooks/useSiteOpsState';
+
 export const VisitorModule: React.FC = () => {
+  const { state, updateState } = useSiteOpsState();
   const [activeSubTab, setActiveSubTab] = useState<'visitors' | 'meetings' | 'photos'>('visitors');
   const [isVisitorModalOpen, setIsVisitorModalOpen] = useState(false);
   const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
-
-  const state = getAppState();
 
   // Visitor Form State
   const [visitorForm, setVisitorForm] = useState({

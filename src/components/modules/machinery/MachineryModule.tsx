@@ -3,14 +3,15 @@
 import React, { useState } from 'react';
 import { Truck, Plus, Clock, Fuel, Wrench, DollarSign, Calendar, AlertCircle } from 'lucide-react';
 import { Equipment, EquipmentUsage, EquipmentPayment } from '@/types';
-import { getAppState, saveAppState } from '@/lib/dbState';
+import { getAppState, saveAppState, createDraftExpenseFromMachineryPayment } from '@/lib/dbState';
+
+import { useSiteOpsState } from '@/hooks/useSiteOpsState';
 
 export const MachineryModule: React.FC = () => {
+  const { state, updateState } = useSiteOpsState();
   const [activeSubTab, setActiveSubTab] = useState<'register' | 'usage' | 'billing'>('register');
   const [isEquipModalOpen, setIsEquipModalOpen] = useState(false);
   const [isUsageModalOpen, setIsUsageModalOpen] = useState(false);
-
-  const state = getAppState();
 
   // Equip Form State
   const [equipForm, setEquipForm] = useState({
@@ -32,6 +33,47 @@ export const MachineryModule: React.FC = () => {
     operator: '',
     breakdownNotes: '',
   });
+
+  // Payment Form State
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({
+    equipmentId: state.equipment[0]?.id || 0,
+    amountPaid: '',
+    paymentMode: 'CASH' as const,
+    notes: '',
+  });
+
+  const handleAddPayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    const equipId = Number(paymentForm.equipmentId) || state.equipment[0]?.id;
+    const amount = Number(paymentForm.amountPaid);
+    if (!equipId || !amount) return;
+
+    const equip = state.equipment.find(eq => eq.id === equipId);
+
+    const newPayment: EquipmentPayment = {
+      id: Date.now(),
+      equipmentId: equipId,
+      amountPaid: amount,
+      paymentDate: new Date().toISOString().split('T')[0],
+      paymentMode: paymentForm.paymentMode,
+      notes: paymentForm.notes,
+    };
+
+    saveAppState({
+      equipmentPayments: [newPayment, ...(state.equipmentPayments || [])],
+    });
+
+    createDraftExpenseFromMachineryPayment(newPayment, equip?.name);
+
+    setIsPaymentModalOpen(false);
+    setPaymentForm({
+      equipmentId: state.equipment[0]?.id || 0,
+      amountPaid: '',
+      paymentMode: 'CASH',
+      notes: '',
+    });
+  };
 
   const handleAddEquipment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,6 +167,13 @@ export const MachineryModule: React.FC = () => {
           >
             <Clock className="w-4 h-4 text-emerald-400" />
             <span>Log Daily Usage</span>
+          </button>
+          <button
+            onClick={() => setIsPaymentModalOpen(true)}
+            className="px-3 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 font-semibold text-xs flex items-center space-x-1.5 transition border border-amber-500/30"
+          >
+            <DollarSign className="w-4 h-4 text-amber-400" />
+            <span>Log Payment (Draft Expense)</span>
           </button>
         </div>
       </div>
@@ -353,6 +402,77 @@ export const MachineryModule: React.FC = () => {
               <div className="pt-2 flex justify-end space-x-2">
                 <button type="button" onClick={() => setIsUsageModalOpen(false)} className="px-4 py-2 rounded-xl bg-zinc-800">Cancel</button>
                 <button type="submit" className="px-5 py-2 rounded-xl bg-emerald-500 text-zinc-950 font-bold">Save Usage Log</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EQUIPMENT PAYMENT */}
+      {isPaymentModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 text-zinc-100 space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <h3 className="font-bold text-base text-white">Log Equipment Rental Payment</h3>
+              <button onClick={() => setIsPaymentModalOpen(false)} className="text-zinc-500">✕</button>
+            </div>
+            <form onSubmit={handleAddPayment} className="space-y-3 text-xs">
+              <div>
+                <label className="text-zinc-400 block mb-1">Select Equipment</label>
+                <select
+                  value={paymentForm.equipmentId}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, equipmentId: Number(e.target.value) })}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-2.5 text-white"
+                >
+                  {state.equipment.map((e) => (
+                    <option key={e.id} value={e.id}>{e.name} ({e.equipmentType})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-zinc-400 block mb-1">Amount Paid (₹)</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 15000"
+                  value={paymentForm.amountPaid}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, amountPaid: e.target.value })}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-2.5 text-white"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-zinc-400 block mb-1">Payment Mode</label>
+                <select
+                  value={paymentForm.paymentMode}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, paymentMode: e.target.value as any })}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-2.5 text-white"
+                >
+                  <option value="CASH">Cash</option>
+                  <option value="BANK_TRANSFER">Bank Transfer / UPI</option>
+                  <option value="CHEQUE">Cheque</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-zinc-400 block mb-1">Notes / Vendor Remarks</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Advance paid to Sharma Cranes"
+                  value={paymentForm.notes}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-2.5 text-white"
+                />
+              </div>
+
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-300">
+                ⚡ Logging this payment automatically posts a <strong>Draft Expense</strong> into Cash Module pending supervisor approval.
+              </div>
+
+              <div className="pt-2 flex justify-end space-x-2">
+                <button type="button" onClick={() => setIsPaymentModalOpen(false)} className="px-4 py-2 rounded-xl bg-zinc-800">Cancel</button>
+                <button type="submit" className="px-5 py-2 rounded-xl bg-emerald-500 text-zinc-950 font-bold">Log & Create Draft Expense</button>
               </div>
             </form>
           </div>

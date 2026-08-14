@@ -1,4 +1,8 @@
-export type ModuleTab = 'dashboard' | 'material' | 'cash' | 'machinery' | 'visitor' | 'safety' | 'quality' | 'whatsappReport' | 'databaseManager';
+export type ModuleTab = 'dashboard' | 'attendance' | 'material' | 'cash' | 'machinery' | 'visitor' | 'safety' | 'quality' | 'whatsappReport' | 'databaseManager';
+
+export * from './attendance';
+export * from './contractorLedger';
+
 
 export interface ContractorMaster {
   id: number;
@@ -56,13 +60,28 @@ export interface MaterialInward {
   dateReceived: string;
 }
 
+export interface MaterialReturnLog {
+  id: number;
+  quantityReturned: number;
+  returnedBy: string;
+  dateReturned: string;
+  remarks?: string;
+}
+
 export interface MaterialIssued {
   id: number;
   materialCategoryId: number;
   itemName: string;
   quantityIssued: number;
+  quantityReturned?: number;
+  returnStatus?: 'NOT_RETURNED' | 'PARTIALLY_RETURNED' | 'FULLY_RETURNED';
+  returnLogs?: MaterialReturnLog[];
   unit: string;
   issuedTo: string; // Contractor / Floor / Purpose
+  contractorId?: number;
+  contractorName?: string;
+  location?: string;
+  engineerRemarks?: string;
   issuedBy?: string;
   dateIssued: string;
 }
@@ -398,12 +417,12 @@ export interface DailyProgressReport {
   fabricationCount: number;
   fabricationNotes?: string;
   
-  // Specialized Agencies
-  surajChauhanTilesCount: number;
+  // Specialized Agencies (Legacy - prefer dynamic customTrades)
+  surajChauhanTilesCount?: number;
   surajChauhanNotes?: string;
-  mohanKhetawatWaterproofingCount: number;
+  mohanKhetawatWaterproofingCount?: number;
   mohanKhetawatNotes?: string;
-  nareshKhetawatWaterproofingCount: number;
+  nareshKhetawatWaterproofingCount?: number;
   nareshKhetawatNotes?: string;
   
   // Dynamic Custom Trades

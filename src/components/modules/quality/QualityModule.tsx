@@ -5,12 +5,13 @@ import { Microscope, Plus, CheckCircle2, XCircle, AlertTriangle, FileText, Calen
 import { CubeTest, MaterialTest, NCRReport } from '@/types';
 import { getAppState, saveAppState } from '@/lib/dbState';
 
+import { useSiteOpsState } from '@/hooks/useSiteOpsState';
+
 export const QualityModule: React.FC = () => {
+  const { state, updateState } = useSiteOpsState();
   const [activeSubTab, setActiveSubTab] = useState<'cube' | 'material' | 'ncr'>('cube');
   const [isCubeModalOpen, setIsCubeModalOpen] = useState(false);
   const [isNcrModalOpen, setIsNcrModalOpen] = useState(false);
-
-  const state = getAppState();
 
   // Cube Test Form State
   const [cubeForm, setCubeForm] = useState({
@@ -87,6 +88,19 @@ export const QualityModule: React.FC = () => {
     setNcrForm({ location: '', description: '', isCodeReference: '', assignedTo: '' });
   };
 
+  const handleApproveNcr = (id: number) => {
+    const updated = state.ncrReports.map(ncr => {
+      if (ncr.id === id) {
+        return {
+          ...ncr,
+          description: ncr.description.replace('[DRAFT NCR - QC Failed]', '[CONFIRMED NCR - Action Required]'),
+        };
+      }
+      return ncr;
+    });
+    saveAppState({ ncrReports: updated });
+  };
+
   return (
     <div className="space-y-4 max-w-7xl mx-auto p-3 sm:p-6 pb-24">
       {/* Header Bar */}
@@ -96,8 +110,8 @@ export const QualityModule: React.FC = () => {
             <Microscope className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-white">Quality Control & Lab Testing</h1>
-            <p className="text-xs text-zinc-400">Concrete Cube Strength Register, Material Lab Certificates & Non-Conformance (NCR)</p>
+            <h1 className="text-lg font-bold text-white">Quality Control & NCR Register</h1>
+            <p className="text-xs text-zinc-400">Track Concrete Cube Strength (7/28 Days), Material Testing & Non-Conformance</p>
           </div>
         </div>
 
@@ -107,14 +121,14 @@ export const QualityModule: React.FC = () => {
             className="flex-1 sm:flex-initial px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-bold text-xs flex items-center justify-center space-x-1.5 transition shadow-lg shadow-emerald-500/20"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Log Cube Test</span>
+            <span>+ Cast Cube Sample</span>
           </button>
           <button
             onClick={() => setIsNcrModalOpen(true)}
-            className="px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-semibold text-xs flex items-center space-x-1.5 transition border border-amber-500/30"
+            className="px-3 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 font-semibold text-xs flex items-center space-x-1.5 transition border border-amber-500/30"
           >
             <AlertTriangle className="w-4 h-4 text-amber-400" />
-            <span>Raise NCR</span>
+            <span>Raise Manual NCR</span>
           </button>
         </div>
       </div>
@@ -129,7 +143,7 @@ export const QualityModule: React.FC = () => {
               : 'text-zinc-400 hover:text-zinc-200'
           }`}
         >
-          🧪 Concrete Cube Tests ({state.cubeTests.length})
+          🧊 Cube Testing ({state.cubeTests.length})
         </button>
         <button
           onClick={() => setActiveSubTab('ncr')}
@@ -139,7 +153,7 @@ export const QualityModule: React.FC = () => {
               : 'text-zinc-400 hover:text-zinc-200'
           }`}
         >
-          ⚠️ Non-Conformance (NCR) ({state.ncrReports.length})
+          ⚠️ Non-Conformance Reports ({state.ncrReports.length})
         </button>
       </div>
 
@@ -150,31 +164,20 @@ export const QualityModule: React.FC = () => {
             <div className="p-8 text-center bg-zinc-900/60 rounded-2xl border border-zinc-800">
               <Microscope className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
               <h3 className="font-bold text-sm text-zinc-300">No Concrete Cube Tests Registered</h3>
-              <p className="text-xs text-zinc-500 mt-1">Track 7-day and 28-day compressive strength results for columns, slabs & beams.</p>
-              <button
-                onClick={() => setIsCubeModalOpen(true)}
-                className="mt-4 px-4 py-2 rounded-xl bg-emerald-500 text-zinc-950 font-bold text-xs"
-              >
-                + Register Cube Sample
-              </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {state.cubeTests.map((t) => (
                 <div key={t.id} className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-xs font-black">
-                      {t.grade}
-                    </span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                      t.status === 'PASS' ? 'bg-emerald-500/20 text-emerald-400' :
-                      t.status === 'FAIL' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'
-                    }`}>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-emerald-400">{t.grade} Concrete</span>
+                      <h3 className="text-sm font-semibold text-white mt-0.5">{t.location}</h3>
+                    </div>
+                    <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[10px] font-bold">
                       {t.status}
                     </span>
                   </div>
-
-                  <h3 className="font-bold text-sm text-white">{t.location}</h3>
 
                   <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-800 text-xs">
                     <div>
@@ -207,20 +210,43 @@ export const QualityModule: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-2">
-              {state.ncrReports.map((ncr) => (
-                <div key={ncr.id} className="p-4 rounded-xl bg-zinc-900 border border-amber-500/30 space-y-2">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="text-xs font-bold text-amber-400">{ncr.location}</span>
+              {state.ncrReports.map((ncr) => {
+                const isDraft = ncr.description.includes('[DRAFT NCR');
+                return (
+                  <div key={ncr.id} className={`p-4 rounded-xl border flex items-center justify-between transition ${
+                    isDraft ? 'bg-amber-950/20 border-amber-500/40' : 'bg-zinc-900 border-zinc-800'
+                  }`}>
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-bold text-amber-400">{ncr.location}</span>
+                        {isDraft && (
+                          <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
+                            Draft (Origin: Failed Material QC)
+                          </span>
+                        )}
+                      </div>
                       <h3 className="text-sm font-semibold text-white mt-0.5">{ncr.description}</h3>
+                      {ncr.assignedTo && <div className="text-xs text-zinc-400">Assigned Inspector: {ncr.assignedTo}</div>}
                     </div>
-                    <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold">
-                      {ncr.status}
-                    </span>
+
+                    <div className="text-right space-y-1">
+                      <span className="inline-block px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold">
+                        {ncr.status}
+                      </span>
+                      {isDraft && (
+                        <div>
+                          <button
+                            onClick={() => handleApproveNcr(ncr.id)}
+                            className="px-3 py-1 text-xs font-bold bg-amber-500 text-zinc-950 rounded-lg hover:bg-amber-400 shadow"
+                          >
+                            Confirm NCR
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  {ncr.assignedTo && <div className="text-xs text-zinc-400">Assigned To: {ncr.assignedTo}</div>}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

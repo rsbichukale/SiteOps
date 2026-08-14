@@ -5,12 +5,13 @@ import { ShieldCheck, AlertOctagon, CheckCircle2, XCircle, Plus, Camera, User, F
 import { SafetyChecklistRecord, SafetyIncident, PPEIssuance } from '@/types';
 import { getAppState, saveAppState } from '@/lib/dbState';
 
+import { useSiteOpsState } from '@/hooks/useSiteOpsState';
+
 export const SafetyModule: React.FC = () => {
+  const { state, updateState } = useSiteOpsState();
   const [activeSubTab, setActiveSubTab] = useState<'checklist' | 'incidents' | 'ppe'>('checklist');
   const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false);
   const [isPpeModalOpen, setIsPpeModalOpen] = useState(false);
-
-  const state = getAppState();
 
   // Daily Safety Checklist State
   const [todayChecks, setTodayChecks] = useState<Record<number, boolean>>(() => {
@@ -352,6 +353,16 @@ export const SafetyModule: React.FC = () => {
                 onChange={(e) => setIncidentForm({ ...incidentForm, injuredPerson: e.target.value })}
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-2.5 text-white"
               />
+              <select
+                value={incidentForm.contractorName}
+                onChange={(e) => setIncidentForm({ ...incidentForm, contractorName: e.target.value })}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-2.5 text-white"
+              >
+                <option value="">-- Select Contractor Agency (Optional) --</option>
+                {state.contractorsMaster.map(c => (
+                  <option key={c.id} value={`${c.name} (${c.trade})`}>{c.name} ({c.trade})</option>
+                ))}
+              </select>
               <textarea
                 placeholder="Corrective Action Taken..."
                 value={incidentForm.correctiveAction}
@@ -384,6 +395,16 @@ export const SafetyModule: React.FC = () => {
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-2.5 text-white"
                 required
               />
+              <select
+                value={ppeForm.contractorName}
+                onChange={(e) => setPpeForm({ ...ppeForm, contractorName: e.target.value })}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-2.5 text-white"
+              >
+                <option value="">-- Select Contractor Agency (Optional) --</option>
+                {state.contractorsMaster.map(c => (
+                  <option key={c.id} value={`${c.name} (${c.trade})`}>{c.name} ({c.trade})</option>
+                ))}
+              </select>
               <select
                 value={ppeForm.item}
                 onChange={(e) => setPpeForm({ ...ppeForm, item: e.target.value as any })}
