@@ -325,25 +325,75 @@ ALTER TABLE cube_tests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE material_tests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ncr_reports ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Allow public read-write sites" ON sites;
 CREATE POLICY "Allow public read-write sites" ON sites FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write material_categories" ON material_categories;
 CREATE POLICY "Allow public read-write material_categories" ON material_categories FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write suppliers" ON suppliers;
 CREATE POLICY "Allow public read-write suppliers" ON suppliers FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write material_inward" ON material_inward;
 CREATE POLICY "Allow public read-write material_inward" ON material_inward FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write material_issued" ON material_issued;
 CREATE POLICY "Allow public read-write material_issued" ON material_issued FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write material_wastage" ON material_wastage;
 CREATE POLICY "Allow public read-write material_wastage" ON material_wastage FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write expense_categories" ON expense_categories;
 CREATE POLICY "Allow public read-write expense_categories" ON expense_categories FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write expenses" ON expenses;
 CREATE POLICY "Allow public read-write expenses" ON expenses FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write fund_requisitions" ON fund_requisitions;
 CREATE POLICY "Allow public read-write fund_requisitions" ON fund_requisitions FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write equipment_types" ON equipment_types;
 CREATE POLICY "Allow public read-write equipment_types" ON equipment_types FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write equipment" ON equipment;
 CREATE POLICY "Allow public read-write equipment" ON equipment FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write equipment_usage" ON equipment_usage;
 CREATE POLICY "Allow public read-write equipment_usage" ON equipment_usage FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write equipment_payments" ON equipment_payments;
 CREATE POLICY "Allow public read-write equipment_payments" ON equipment_payments FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write visitors" ON visitors;
 CREATE POLICY "Allow public read-write visitors" ON visitors FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write meetings" ON meetings;
 CREATE POLICY "Allow public read-write meetings" ON meetings FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write site_photos" ON site_photos;
 CREATE POLICY "Allow public read-write site_photos" ON site_photos FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write safety_check_items" ON safety_check_items;
 CREATE POLICY "Allow public read-write safety_check_items" ON safety_check_items FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write safety_checklists" ON safety_checklists;
 CREATE POLICY "Allow public read-write safety_checklists" ON safety_checklists FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write safety_incidents" ON safety_incidents;
 CREATE POLICY "Allow public read-write safety_incidents" ON safety_incidents FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write ppe_issuance" ON ppe_issuance;
+CREATE POLICY "Allow public read-write ppe_issuance" ON ppe_issuance FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write cube_tests" ON cube_tests;
+CREATE POLICY "Allow public read-write cube_tests" ON cube_tests FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write material_tests" ON material_tests;
+CREATE POLICY "Allow public read-write material_tests" ON material_tests FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write ncr_reports" ON ncr_reports;
+CREATE POLICY "Allow public read-write ncr_reports" ON ncr_reports FOR ALL USING (true);
+
 CREATE TABLE IF NOT EXISTS daily_progress_reports (
     id SERIAL PRIMARY KEY,
     report_date VARCHAR(50) NOT NULL,
@@ -384,6 +434,7 @@ CREATE TABLE IF NOT EXISTS daily_progress_reports (
 );
 
 ALTER TABLE daily_progress_reports ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public read-write daily_progress_reports" ON daily_progress_reports;
 CREATE POLICY "Allow public read-write daily_progress_reports" ON daily_progress_reports FOR ALL USING (true);
 
 -- 25. Contractors Master
@@ -449,9 +500,17 @@ ALTER TABLE contractor_shifts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE contractor_material_allocations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE material_damage_deductions ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Allow public read-write contractors_master" ON contractors_master;
 CREATE POLICY "Allow public read-write contractors_master" ON contractors_master FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write contractor_shifts" ON contractor_shifts;
 CREATE POLICY "Allow public read-write contractor_shifts" ON contractor_shifts FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write contractor_material_allocations" ON contractor_material_allocations;
 CREATE POLICY "Allow public read-write contractor_material_allocations" ON contractor_material_allocations FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow public read-write material_damage_deductions" ON material_damage_deductions;
 CREATE POLICY "Allow public read-write material_damage_deductions" ON material_damage_deductions FOR ALL USING (true);
+
 
 
