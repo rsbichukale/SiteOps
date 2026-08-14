@@ -13,7 +13,7 @@ test('database schema has no unrestricted anonymous policies', async () => {
 });
 
 test('frontend environment templates cannot contain privileged database keys', async () => {
-  const environment = await read('.env');
+  const environment = await read('.env.example');
   assert.doesNotMatch(environment, /^SUPABASE_SERVICE_ROLE_KEY=/m);
   assert.doesNotMatch(environment, /^DATABASE_URL=/m);
 });
